@@ -248,21 +248,19 @@ export default function FinancialsPage() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-            {(!isMember || user?.canViewAmounts) && (
-              <Card>
-                <CardContent className="pt-5 pb-5">
-                  <p className="text-xs text-muted-foreground">Total Earnings (Paid)</p>
-                  <p className="text-xl font-bold mt-1 text-primary" data-testid="stat-total-earnings">
-                    Rs {(stats?.totalEarnings || 0).toLocaleString()}
+            <Card>
+              <CardContent className="pt-5 pb-5">
+                <p className="text-xs text-muted-foreground">Total Earnings (Paid)</p>
+                <p className="text-xl font-bold mt-1 text-primary" data-testid="stat-total-earnings">
+                  Rs {(stats?.totalEarnings || 0).toLocaleString()}
+                </p>
+                {(stats?.paidShows || 0) > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    from {stats?.paidShows} paid show{stats?.paidShows !== 1 ? "s" : ""}
                   </p>
-                  {(stats?.paidShows || 0) > 0 && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      from {stats?.paidShows} paid show{stats?.paidShows !== 1 ? "s" : ""}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                )}
+              </CardContent>
+            </Card>
             <Card>
               <CardContent className="pt-5 pb-5">
                 <p className="text-xs text-muted-foreground">Shows Performed</p>
@@ -271,46 +269,40 @@ export default function FinancialsPage() {
                 </p>
               </CardContent>
             </Card>
-            {(!isMember || user?.canViewAmounts) && (
-              <Card>
-                <CardContent className="pt-5 pb-5">
-                  <p className="text-xs text-muted-foreground">Avg Per Show</p>
-                  <p className="text-xl font-bold mt-1" data-testid="stat-avg-per-show">
-                    Rs {(stats?.avgPerShow || 0).toLocaleString()}
+            <Card>
+              <CardContent className="pt-5 pb-5">
+                <p className="text-xs text-muted-foreground">Avg Per Show</p>
+                <p className="text-xl font-bold mt-1" data-testid="stat-avg-per-show">
+                  Rs {(stats?.avgPerShow || 0).toLocaleString()}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-5">
+                <p className="text-xs text-muted-foreground">Unpaid Amount</p>
+                <p className="text-xl font-bold mt-1" data-testid="stat-unpaid-amount">
+                  Rs {(stats?.unpaidAmount || 0).toLocaleString()}
+                </p>
+                {(stats?.unpaidShows || 0) > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {stats?.unpaidShows} completed show{stats?.unpaidShows !== 1 ? "s" : ""} not yet paid
                   </p>
-                </CardContent>
-              </Card>
-            )}
-            {(!isMember || user?.canViewAmounts) && (
-              <Card>
-                <CardContent className="pt-5 pb-5">
-                  <p className="text-xs text-muted-foreground">Unpaid Amount</p>
-                  <p className="text-xl font-bold mt-1" data-testid="stat-unpaid-amount">
-                    Rs {(stats?.unpaidAmount || 0).toLocaleString()}
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-5">
+                <p className="text-xs text-muted-foreground">Pending Amount</p>
+                <p className="text-xl font-bold mt-1" data-testid="stat-pending-amount">
+                  Rs {(stats?.pendingAmount || 0).toLocaleString()}
+                </p>
+                {(stats?.upcomingShowsCount || 0) > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {stats?.upcomingShowsCount} upcoming show{stats?.upcomingShowsCount !== 1 ? "s" : ""}
                   </p>
-                  {(stats?.unpaidShows || 0) > 0 && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {stats?.unpaidShows} completed show{stats?.unpaidShows !== 1 ? "s" : ""} not yet paid
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-            {(!isMember || user?.canViewAmounts) && (
-              <Card>
-                <CardContent className="pt-5 pb-5">
-                  <p className="text-xs text-muted-foreground">Pending Amount</p>
-                  <p className="text-xl font-bold mt-1" data-testid="stat-pending-amount">
-                    Rs {(stats?.pendingAmount || 0).toLocaleString()}
-                  </p>
-                  {(stats?.upcomingShowsCount || 0) > 0 && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {stats?.upcomingShowsCount} upcoming show{stats?.upcomingShowsCount !== 1 ? "s" : ""}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                )}
+              </CardContent>
+            </Card>
             {isMember && (stats?.referredCount || 0) > 0 && (
               <Card>
                 <CardContent className="pt-5 pb-5">
@@ -431,12 +423,10 @@ export default function FinancialsPage() {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                            {(!isMember || user?.canViewAmounts) && (
-                              <span className="text-sm font-bold text-muted-foreground" data-testid={`financial-upcoming-earning-${show.id}`}>
-                                Rs {show.memberEarning.toLocaleString()}
-                              </span>
-                            )}
-                            {isMember && user?.canViewAmounts && (
+                            <span className="text-sm font-bold text-muted-foreground" data-testid={`financial-upcoming-earning-${show.id}`}>
+                              Rs {show.memberEarning.toLocaleString()}
+                            </span>
+                            {isMember && (
                               <span className="text-[10px] text-muted-foreground italic">Estimated</span>
                             )}
                             {isAdmin && (
@@ -526,11 +516,9 @@ export default function FinancialsPage() {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                            {(!isMember || user?.canViewAmounts) && (
-                              <span className="text-sm font-bold text-primary" data-testid={`financial-earning-${show.id}`}>
-                                Rs {show.memberEarning.toLocaleString()}
-                              </span>
-                            )}
+                            <span className="text-sm font-bold text-primary" data-testid={`financial-earning-${show.id}`}>
+                              Rs {show.memberEarning.toLocaleString()}
+                            </span>
                             {isAdmin && (
                               <span className="text-[10px] text-muted-foreground">
                                 of Rs {show.totalAmount.toLocaleString()}

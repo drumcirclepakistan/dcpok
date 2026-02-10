@@ -270,15 +270,13 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                {user?.canViewAmounts !== false && (
-                  <StatCard
-                    label="Total Earnings"
-                    value={`Rs ${(memberStats?.totalEarnings || 0).toLocaleString()}`}
-                    icon={Crown}
-                    testId="stat-total-earnings"
-                    variant="highlight"
-                  />
-                )}
+                <StatCard
+                  label="Total Earnings"
+                  value={`Rs ${(memberStats?.totalEarnings || 0).toLocaleString()}`}
+                  icon={Crown}
+                  testId="stat-total-earnings"
+                  variant="highlight"
+                />
                 <StatCard
                   label="Shows Performed"
                   value={memberStats?.showsPerformed || 0}
@@ -291,14 +289,12 @@ export default function Dashboard() {
                   icon={CalendarDays}
                   testId="stat-upcoming"
                 />
-                {user?.canViewAmounts !== false && (
-                  <StatCard
-                    label="Pending Payments"
-                    value={`Rs ${(memberStats?.pendingPayments || 0).toLocaleString()}`}
-                    icon={Wallet}
-                    testId="stat-pending-payments"
-                  />
-                )}
+                <StatCard
+                  label="Pending Payments"
+                  value={`Rs ${(memberStats?.pendingPayments || 0).toLocaleString()}`}
+                  icon={Wallet}
+                  testId="stat-pending-payments"
+                />
                 {(memberStats?.referredCount || 0) > 0 && (
                   <StatCard
                     label="Shows Referred"
