@@ -171,10 +171,6 @@ export default function ShowForm() {
     setPendingData(null);
   };
 
-  const showType = form.watch("showType");
-  const needsOrg = showType === "Corporate" || showType === "University";
-  const isPublic = showType === "Public";
-
   if (isEditing && isLoadingShow) {
     return (
       <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
@@ -270,47 +266,43 @@ export default function ShowForm() {
                 />
               </div>
 
-              {needsOrg && (
-                <FormField
-                  control={form.control}
-                  name="organizationName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{showType === "University" ? "University Name" : "Company Name"}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          value={field.value || ""}
-                          data-testid="input-organization"
-                          placeholder={showType === "University" ? "e.g. LUMS, IBA Karachi" : "e.g. Unilever, Jazz"}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+              <FormField
+                control={form.control}
+                name="organizationName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Organization Name (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="input-organization"
+                        placeholder="e.g. Unilever, Jazz, LUMS"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              {isPublic && (
-                <FormField
-                  control={form.control}
-                  name="publicShowFor"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Public Show For (Optional)</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          value={field.value || ""}
-                          data-testid="input-public-show-for"
-                          placeholder="e.g. Cafe Aylanto, Monal Restaurant"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+              <FormField
+                control={form.control}
+                name="publicShowFor"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Public Show For (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="input-public-show-for"
+                        placeholder="e.g. Cafe Aylanto, Monal Restaurant"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={form.control}

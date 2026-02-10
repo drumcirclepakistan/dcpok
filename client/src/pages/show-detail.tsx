@@ -474,7 +474,7 @@ export default function ShowDetail() {
                   <Building2 className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground">
-                      {show.showType === "University" ? "University" : "Company"}
+                      Organization
                     </p>
                     <p className="text-sm font-medium" data-testid="text-detail-org">{show.organizationName}</p>
                   </div>

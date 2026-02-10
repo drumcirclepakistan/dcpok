@@ -124,15 +124,7 @@ function StatSkeleton() {
   );
 }
 
-const showTypeBadgeVariant = (type: string) => {
-  switch (type) {
-    case "Corporate": return "default";
-    case "University": return "secondary";
-    case "Private": return "outline";
-    case "Public": return "secondary";
-    default: return "outline";
-  }
-};
+const showTypeBadgeVariant = (_type: string) => "secondary";
 
 const timeRangeLabels: Record<TimeRange, string> = {
   lifetime: "Lifetime",
