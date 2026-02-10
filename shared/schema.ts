@@ -20,14 +20,13 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-export const showTypeEnum = pgEnum("show_type", ["Corporate", "Private", "Public", "University"]);
 export const showStatusEnum = pgEnum("show_status", ["upcoming", "completed", "cancelled"]);
 
 export const shows = pgTable("shows", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   city: text("city").notNull(),
-  showType: showTypeEnum("show_type").notNull(),
+  showType: text("show_type").notNull(),
   organizationName: text("organization_name"),
   publicShowFor: text("public_show_for"),
   totalAmount: integer("total_amount").notNull(),
@@ -63,8 +62,13 @@ export const insertShowSchema = createInsertSchema(shows).omit({
 export type InsertShow = z.infer<typeof insertShowSchema>;
 export type Show = typeof shows.$inferSelect;
 
-export const showTypes = ["Corporate", "Private", "Public", "University"] as const;
-export type ShowType = typeof showTypes[number];
+export const defaultShowTypes = ["Corporate", "Private", "Public", "University"];
+
+export const showTypesTable = pgTable("show_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  userId: varchar("user_id").notNull(),
+});
 
 export const memberRoleEnum = pgEnum("member_role", ["session_player", "manager", "other"]);
 export const paymentTypeEnum = pgEnum("payment_type", ["percentage", "fixed", "manual"]);
@@ -114,6 +118,12 @@ export const bandMembers = pgTable("band_members", {
   role: text("role").notNull().default("session_player"),
   customRole: text("custom_role"),
   userId: varchar("user_id"),
+  paymentType: text("payment_type").notNull().default("fixed"),
+  normalRate: integer("normal_rate").notNull().default(0),
+  referralRate: integer("referral_rate"),
+  hasMinLogic: boolean("has_min_logic").notNull().default(false),
+  minThreshold: integer("min_threshold"),
+  minFlatRate: integer("min_flat_rate"),
 });
 
 export const insertBandMemberSchema = createInsertSchema(bandMembers).omit({
@@ -123,6 +133,12 @@ export const insertBandMemberSchema = createInsertSchema(bandMembers).omit({
   role: z.string().min(1, "Role is required"),
   customRole: z.string().optional().nullable(),
   userId: z.string().optional().nullable(),
+  paymentType: z.string().optional(),
+  normalRate: z.coerce.number().min(0).optional(),
+  referralRate: z.coerce.number().min(0).optional().nullable(),
+  hasMinLogic: z.boolean().optional(),
+  minThreshold: z.coerce.number().min(0).optional().nullable(),
+  minFlatRate: z.coerce.number().min(0).optional().nullable(),
 });
 
 export type InsertBandMember = z.infer<typeof insertBandMemberSchema>;
@@ -137,15 +153,4 @@ export const settings = pgTable("settings", {
 
 export type Setting = typeof settings.$inferSelect;
 
-export const defaultSettings: Record<string, string> = {
-  session_player_percentage: "15",
-  referral_percentage: "33",
-  wahab_fixed_rate: "15000",
-  manager_default_rate: "3000",
-};
-
-export const memberPresets = [
-  { name: "Zain Shahid", role: "session_player" as const, paymentType: "percentage" as const, settingsKey: "session_player_percentage" },
-  { name: "Wahab", role: "session_player" as const, paymentType: "fixed" as const, settingsKey: "wahab_fixed_rate" },
-  { name: "Hassan", role: "manager" as const, paymentType: "fixed" as const, settingsKey: "manager_default_rate" },
-] as const;
+export const defaultSettings: Record<string, string> = {};

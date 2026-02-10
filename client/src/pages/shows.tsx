@@ -37,6 +37,10 @@ export default function ShowsPage() {
     queryKey: ["/api/shows"],
   });
 
+  const { data: showTypes = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/show-types"],
+  });
+
   const filtered = useMemo(() => {
     if (!shows) return [];
     return shows
@@ -63,10 +67,20 @@ export default function ShowsPage() {
       .sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime());
   }, [filtered]);
 
+  const noAdvancePaid = useMemo(() => {
+    return filtered
+      .filter((s) => {
+        const isUpcoming = s.status === "upcoming" && new Date(s.showDate) > new Date();
+        return isUpcoming && s.advancePayment === 0;
+      })
+      .sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime());
+  }, [filtered]);
+
   const otherShows = useMemo(() => {
     const unpaidCompletedIds = new Set(unpaidCompleted.map((s) => s.id));
+    const noAdvanceIds = new Set(noAdvancePaid.map((s) => s.id));
     return filtered
-      .filter((s) => !unpaidCompletedIds.has(s.id))
+      .filter((s) => !unpaidCompletedIds.has(s.id) && !noAdvanceIds.has(s.id))
       .sort((a, b) => {
         const aUpcoming = a.status === "upcoming";
         const bUpcoming = b.status === "upcoming";
@@ -192,10 +206,9 @@ export default function ShowsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="Corporate">Corporate</SelectItem>
-            <SelectItem value="Private">Private</SelectItem>
-            <SelectItem value="Public">Public</SelectItem>
-            <SelectItem value="University">University</SelectItem>
+            {showTypes.map((type) => (
+              <SelectItem key={type.id} value={type.name}>{type.name}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select value={paidFilter} onValueChange={setPaidFilter}>
@@ -262,9 +275,21 @@ export default function ShowsPage() {
             </div>
           )}
 
+          {noAdvancePaid.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-orange-500 dark:text-orange-400" />
+                <h3 className="text-sm font-semibold text-orange-600 dark:text-orange-400" data-testid="text-no-advance">
+                  No Advance Received ({noAdvancePaid.length})
+                </h3>
+              </div>
+              {noAdvancePaid.map((show) => renderShowCard(show, false))}
+            </div>
+          )}
+
           {otherShows.length > 0 && (
             <div className="space-y-2">
-              {unpaidCompleted.length > 0 && (
+              {(unpaidCompleted.length > 0 || noAdvancePaid.length > 0) && (
                 <h3 className="text-sm font-semibold text-muted-foreground mt-2">All Shows</h3>
               )}
               {otherShows.map((show) => renderShowCard(show, false))}

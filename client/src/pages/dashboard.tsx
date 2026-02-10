@@ -15,7 +15,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { useAuth } from "@/lib/auth";
 import {
   CalendarDays, TrendingUp, Music, MapPin, Layers,
-  Wallet, Receipt, Crown, AlertCircle, Calendar as CalendarIcon,
+  Wallet, Receipt, Crown, AlertCircle, AlertTriangle, Calendar as CalendarIcon,
 } from "lucide-react";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths, subYears, endOfDay } from "date-fns";
 import { Link } from "wouter";
@@ -37,6 +37,7 @@ interface DashboardStats {
   founderRevenue: number;
   upcomingCount: number;
   pendingAmount: number;
+  noAdvanceCount: number;
   topCities: { city: string; count: number }[];
   topTypes: { type: string; count: number }[];
 }
@@ -83,20 +84,23 @@ function StatCard({
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
   testId: string;
-  variant?: "default" | "highlight";
+  variant?: "default" | "highlight" | "warning";
 }) {
+  const iconBg = variant === "warning" ? "bg-orange-500/10" : "bg-primary/10";
+  const iconColor = variant === "warning" ? "text-orange-500" : "text-primary";
+  const valueColor = variant === "highlight" ? "text-primary" : variant === "warning" ? "text-orange-600 dark:text-orange-400" : "";
   return (
     <Card>
       <CardContent className="pt-5 pb-5">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
             <p className="text-xs text-muted-foreground">{label}</p>
-            <p className={`text-xl font-bold mt-1 ${variant === "highlight" ? "text-primary" : ""}`} data-testid={testId}>
+            <p className={`text-xl font-bold mt-1 ${valueColor}`} data-testid={testId}>
               {value}
             </p>
           </div>
-          <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <Icon className="w-4 h-4 text-primary" />
+          <div className={`w-9 h-9 rounded-md ${iconBg} flex items-center justify-center flex-shrink-0`}>
+            <Icon className={`w-4 h-4 ${iconColor}`} />
           </div>
         </div>
       </CardContent>
@@ -271,6 +275,15 @@ export default function Dashboard() {
               icon={Wallet}
               testId="stat-pending"
             />
+            {(stats?.noAdvanceCount || 0) > 0 && (
+              <StatCard
+                label="No Advance Received"
+                value={stats?.noAdvanceCount || 0}
+                icon={AlertTriangle}
+                testId="stat-no-advance"
+                variant="warning"
+              />
+            )}
           </>
         )}
       </div>

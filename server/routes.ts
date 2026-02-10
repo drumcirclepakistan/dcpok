@@ -88,7 +88,7 @@ export async function registerRoutes(
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       title TEXT NOT NULL,
       city TEXT NOT NULL,
-      show_type show_type NOT NULL,
+      show_type TEXT NOT NULL DEFAULT 'Corporate',
       organization_name TEXT,
       total_amount INTEGER NOT NULL,
       advance_payment INTEGER NOT NULL DEFAULT 0,
@@ -103,7 +103,14 @@ export async function registerRoutes(
     )
   `);
 
-  // Add POC columns if they don't exist (migration for existing tables)
+  // Migrate show_type from enum to text if needed
+  await db.execute(sql`
+    DO $$ BEGIN
+      ALTER TABLE shows ALTER COLUMN show_type TYPE TEXT;
+    EXCEPTION WHEN others THEN null; END $$
+  `);
+
+  // Add columns if they don't exist (migration for existing tables)
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_name TEXT`);
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_phone TEXT`);
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_email TEXT`);
@@ -148,6 +155,23 @@ export async function registerRoutes(
       role TEXT NOT NULL DEFAULT 'session_player',
       custom_role TEXT,
       user_id VARCHAR
+    )
+  `);
+
+  // Add payment config columns to band_members
+  await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'fixed'`);
+  await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS normal_rate INTEGER`);
+  await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS referral_rate INTEGER`);
+  await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS has_min_logic BOOLEAN NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS min_threshold INTEGER`);
+  await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS min_flat_rate INTEGER`);
+
+  // Show types table
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS show_types (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL UNIQUE,
+      user_id VARCHAR NOT NULL
     )
   `);
 
@@ -392,6 +416,35 @@ export async function registerRoutes(
         filteredShows = filteredShows.filter((s) => new Date(s.showDate) <= toDate);
       }
 
+      const allBandMembers = await storage.getBandMembers();
+      const bandMemberConfigMap: Record<string, typeof allBandMembers[0]> = {};
+      for (const bm of allBandMembers) {
+        bandMemberConfigMap[bm.name] = bm;
+      }
+
+      const calcPayout = (
+        m: { name: string; paymentType: string; paymentValue: number; isReferrer: boolean },
+        showTotal: number,
+        netAmount: number,
+        totalExp: number
+      ): number => {
+        const config = bandMemberConfigMap[m.name];
+        if (m.paymentType === "percentage") {
+          if (m.isReferrer && config?.referralRate) {
+            return Math.round((config.referralRate / 100) * netAmount);
+          }
+          if (config?.hasMinLogic && config.minThreshold && config.minFlatRate) {
+            if (showTotal < config.minThreshold) {
+              if (totalExp === 0) return config.minFlatRate;
+              const deduction = Math.round((m.paymentValue / 100) * totalExp);
+              return Math.max(0, config.minFlatRate - deduction);
+            }
+          }
+          return Math.round((m.paymentValue / 100) * netAmount);
+        }
+        return m.paymentValue;
+      };
+
       let totalExpenses = 0;
       let totalMemberPayouts = 0;
 
@@ -404,11 +457,7 @@ export async function registerRoutes(
         const net = show.totalAmount - expenseSum;
         let memberPayout = 0;
         for (const m of members) {
-          if (m.paymentType === "percentage") {
-            memberPayout += Math.round((m.paymentValue / 100) * net);
-          } else {
-            memberPayout += m.paymentValue;
-          }
+          memberPayout += calcPayout(m, show.totalAmount, net, expenseSum);
         }
         totalMemberPayouts += memberPayout;
       }
@@ -437,6 +486,7 @@ export async function registerRoutes(
       const pendingAmount = allShows
         .filter((s) => !s.isPaid)
         .reduce((s, sh) => s + (sh.totalAmount - sh.advancePayment), 0);
+      const noAdvanceCount = allShows.filter((s) => s.status === "upcoming" && s.advancePayment === 0).length;
 
       res.json({
         totalShows: filteredShows.length,
@@ -446,6 +496,7 @@ export async function registerRoutes(
         founderRevenue,
         upcomingCount,
         pendingAmount,
+        noAdvanceCount,
         topCities,
         topTypes,
       });
@@ -470,27 +521,33 @@ export async function registerRoutes(
         filteredShows = filteredShows.filter((s) => new Date(s.showDate) <= toDate);
       }
 
-      const appSettings = await storage.getSettings(req.session.userId!);
-      const settingsMap: Record<string, string> = { ...defaultSettings };
-      for (const s of appSettings) {
-        settingsMap[s.key] = s.value;
+      const allBandMembers = await storage.getBandMembers();
+      const bandMemberConfigMap: Record<string, typeof allBandMembers[0]> = {};
+      for (const bm of allBandMembers) {
+        bandMemberConfigMap[bm.name] = bm;
       }
 
-      const calculateZainPayout = (
-        paymentValue: number,
-        isReferrer: boolean,
+      const calculateMemberPayout = (
+        showMember: { name: string; paymentType: string; paymentValue: number; isReferrer: boolean },
         showTotal: number,
         netAmount: number,
         totalExpenses: number
       ): number => {
-        if (isReferrer) return Math.round((paymentValue / 100) * netAmount);
-        if (showTotal < 100000) {
-          const base = 15000;
-          if (totalExpenses === 0) return base;
-          const deduction = Math.round((paymentValue / 100) * totalExpenses);
-          return Math.max(0, base - deduction);
+        const config = bandMemberConfigMap[showMember.name];
+        if (showMember.paymentType === "percentage") {
+          if (showMember.isReferrer && config?.referralRate) {
+            return Math.round((config.referralRate / 100) * netAmount);
+          }
+          if (config?.hasMinLogic && config.minThreshold && config.minFlatRate) {
+            if (showTotal < config.minThreshold) {
+              if (totalExpenses === 0) return config.minFlatRate;
+              const deduction = Math.round((showMember.paymentValue / 100) * totalExpenses);
+              return Math.max(0, config.minFlatRate - deduction);
+            }
+          }
+          return Math.round((showMember.paymentValue / 100) * netAmount);
         }
-        return Math.round((paymentValue / 100) * netAmount);
+        return showMember.paymentValue;
       };
 
       interface ShowDetail {
@@ -523,13 +580,7 @@ export async function registerRoutes(
         if (member === "Haider Jamil") {
           let totalMemberPayouts = 0;
           for (const m of members) {
-            if (m.name === "Zain Shahid" && m.paymentType === "percentage") {
-              totalMemberPayouts += calculateZainPayout(m.paymentValue, m.isReferrer, show.totalAmount, net, expenseSum);
-            } else if (m.paymentType === "percentage") {
-              totalMemberPayouts += Math.round((m.paymentValue / 100) * net);
-            } else {
-              totalMemberPayouts += m.paymentValue;
-            }
+            totalMemberPayouts += calculateMemberPayout(m, show.totalAmount, net, expenseSum);
           }
           memberEarning = net - totalMemberPayouts;
           participated = true;
@@ -537,13 +588,7 @@ export async function registerRoutes(
           const found = members.find((m) => m.name === member);
           if (found) {
             participated = true;
-            if (found.name === "Zain Shahid" && found.paymentType === "percentage") {
-              memberEarning = calculateZainPayout(found.paymentValue, found.isReferrer, show.totalAmount, net, expenseSum);
-            } else if (found.paymentType === "percentage") {
-              memberEarning = Math.round((found.paymentValue / 100) * net);
-            } else {
-              memberEarning = found.paymentValue;
-            }
+            memberEarning = calculateMemberPayout(found, show.totalAmount, net, expenseSum);
           }
         }
 
@@ -653,7 +698,7 @@ export async function registerRoutes(
 
   app.patch("/api/band-members/:id", requireAdmin, async (req, res) => {
     try {
-      const updated = await storage.updateBandMember(req.params.id, req.body);
+      const updated = await storage.updateBandMember(req.params.id as string, req.body);
       if (!updated) return res.status(404).json({ message: "Band member not found" });
       res.json(updated);
     } catch (err: any) {
@@ -662,7 +707,7 @@ export async function registerRoutes(
   });
 
   app.delete("/api/band-members/:id", requireAdmin, async (req, res) => {
-    const deleted = await storage.deleteBandMember(req.params.id);
+    const deleted = await storage.deleteBandMember(req.params.id as string);
     if (!deleted) return res.status(404).json({ message: "Band member not found" });
     res.json({ message: "Band member deleted" });
   });
@@ -670,7 +715,7 @@ export async function registerRoutes(
   // Member account management
   app.post("/api/band-members/:id/create-account", requireAdmin, async (req, res) => {
     try {
-      const member = await storage.getBandMember(req.params.id);
+      const member = await storage.getBandMember(req.params.id as string);
       if (!member) return res.status(404).json({ message: "Band member not found" });
       if (member.userId) return res.status(400).json({ message: "This member already has an account" });
 
@@ -702,7 +747,7 @@ export async function registerRoutes(
 
   app.post("/api/band-members/:id/reset-password", requireAdmin, async (req, res) => {
     try {
-      const member = await storage.getBandMember(req.params.id);
+      const member = await storage.getBandMember(req.params.id as string);
       if (!member) return res.status(404).json({ message: "Band member not found" });
       if (!member.userId) return res.status(400).json({ message: "This member has no account" });
 
@@ -720,7 +765,7 @@ export async function registerRoutes(
 
   app.delete("/api/band-members/:id/delete-account", requireAdmin, async (req, res) => {
     try {
-      const member = await storage.getBandMember(req.params.id);
+      const member = await storage.getBandMember(req.params.id as string);
       if (!member) return res.status(404).json({ message: "Band member not found" });
       if (!member.userId) return res.status(400).json({ message: "This member has no account" });
 
@@ -730,6 +775,41 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Failed to delete account" });
     }
+  });
+
+  // Show Types CRUD
+  app.get("/api/show-types", requireAuth, async (req, res) => {
+    const types = await storage.getShowTypes(req.session.userId!);
+    res.json(types);
+  });
+
+  app.post("/api/show-types", requireAdmin, async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name || !name.trim()) return res.status(400).json({ message: "Name is required" });
+      const created = await storage.createShowType(name.trim(), req.session.userId!);
+      res.json(created);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Failed to create show type" });
+    }
+  });
+
+  app.patch("/api/show-types/:id", requireAdmin, async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name || !name.trim()) return res.status(400).json({ message: "Name is required" });
+      const updated = await storage.updateShowType(req.params.id as string, name.trim());
+      if (!updated) return res.status(404).json({ message: "Show type not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Failed to update show type" });
+    }
+  });
+
+  app.delete("/api/show-types/:id", requireAdmin, async (req, res) => {
+    const deleted = await storage.deleteShowType(req.params.id as string);
+    if (!deleted) return res.status(404).json({ message: "Show type not found" });
+    res.json({ message: "Show type deleted" });
   });
 
   return httpServer;

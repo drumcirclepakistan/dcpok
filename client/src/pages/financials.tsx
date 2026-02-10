@@ -53,7 +53,10 @@ interface FinancialStats {
   upcomingShows: FinancialShow[];
 }
 
-const members = ["Haider Jamil", "Zain Shahid", "Wahab", "Hassan"];
+interface BandMemberInfo {
+  id: string;
+  name: string;
+}
 
 const timeRangeLabels: Record<TimeRange, string> = {
   lifetime: "Lifetime",
@@ -112,6 +115,15 @@ export default function FinancialsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("lifetime");
   const [customRange, setCustomRange] = useState<CustomDateRange | undefined>();
 
+  const { data: bandMembers = [] } = useQuery<BandMemberInfo[]>({
+    queryKey: ["/api/band-members"],
+  });
+
+  const memberNames = useMemo(() => {
+    const names = ["Haider Jamil", ...bandMembers.map((m) => m.name)];
+    return Array.from(new Set(names));
+  }, [bandMembers]);
+
   const dateRange = useMemo(() => getDateRange(timeRange, customRange), [timeRange, customRange]);
 
   const queryUrl = useMemo(() => {
@@ -148,7 +160,7 @@ export default function FinancialsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {members.map((m) => (
+              {memberNames.map((m) => (
                 <SelectItem key={m} value={m}>{m}</SelectItem>
               ))}
             </SelectContent>

@@ -2,7 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { insertShowSchema, showTypes, type InsertShow, type Show } from "@shared/schema";
+import { insertShowSchema, type InsertShow, type Show } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,10 @@ export default function ShowForm() {
   const { data: existingShow, isLoading: isLoadingShow } = useQuery<Show>({
     queryKey: ["/api/shows", id],
     enabled: isEditing,
+  });
+
+  const { data: showTypes = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/show-types"],
   });
 
   const form = useForm<InsertShow>({
@@ -256,7 +260,7 @@ export default function ShowForm() {
                         </FormControl>
                         <SelectContent>
                           {showTypes.map((type) => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                            <SelectItem key={type.id} value={type.name}>{type.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

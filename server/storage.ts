@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import {
-  users, shows, showExpenses, showMembers, settings, bandMembers,
+  users, shows, showExpenses, showMembers, settings, bandMembers, showTypesTable,
   type User, type InsertUser, type Show, type InsertShow,
   type ShowExpense, type InsertExpense,
   type ShowMember, type InsertMember,
@@ -60,6 +60,11 @@ export interface IStorage {
   getAllUsers(): Promise<User[]>;
   updateUser(id: string, data: Partial<{ password: string; displayName: string; role: string }>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
+
+  getShowTypes(userId: string): Promise<{ id: string; name: string; userId: string }[]>;
+  createShowType(name: string, userId: string): Promise<{ id: string; name: string; userId: string }>;
+  updateShowType(id: string, name: string): Promise<{ id: string; name: string; userId: string } | undefined>;
+  deleteShowType(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -216,6 +221,25 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUser(id: string): Promise<boolean> {
     const result = await db.delete(users).where(eq(users.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getShowTypes(userId: string): Promise<{ id: string; name: string; userId: string }[]> {
+    return db.select().from(showTypesTable).where(eq(showTypesTable.userId, userId));
+  }
+
+  async createShowType(name: string, userId: string): Promise<{ id: string; name: string; userId: string }> {
+    const [created] = await db.insert(showTypesTable).values({ name, userId }).returning();
+    return created;
+  }
+
+  async updateShowType(id: string, name: string): Promise<{ id: string; name: string; userId: string } | undefined> {
+    const [updated] = await db.update(showTypesTable).set({ name }).where(eq(showTypesTable.id, id)).returning();
+    return updated;
+  }
+
+  async deleteShowType(id: string): Promise<boolean> {
+    const result = await db.delete(showTypesTable).where(eq(showTypesTable.id, id)).returning();
     return result.length > 0;
   }
 }

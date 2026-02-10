@@ -1,17 +1,38 @@
 import { storage } from "./storage";
 import { db } from "./db";
-import { users, shows, bandMembers } from "@shared/schema";
+import { users, shows, bandMembers, showTypesTable, defaultShowTypes } from "@shared/schema";
 
 export async function seedDatabase() {
   const existingMembers = await db.select().from(bandMembers);
   if (existingMembers.length === 0) {
-    await storage.createBandMember({ name: "Zain Shahid", role: "session_player", customRole: null, userId: null });
-    await storage.createBandMember({ name: "Wahab", role: "session_player", customRole: null, userId: null });
-    await storage.createBandMember({ name: "Hassan", role: "manager", customRole: null, userId: null });
+    await storage.createBandMember({
+      name: "Zain Shahid", role: "session_player", customRole: null, userId: null,
+      paymentType: "percentage", normalRate: 15, referralRate: 33,
+      hasMinLogic: true, minThreshold: 100000, minFlatRate: 15000,
+    });
+    await storage.createBandMember({
+      name: "Wahab", role: "session_player", customRole: null, userId: null,
+      paymentType: "fixed", normalRate: 15000,
+    });
+    await storage.createBandMember({
+      name: "Hassan", role: "manager", customRole: null, userId: null,
+      paymentType: "fixed", normalRate: 3000,
+    });
   }
 
   const existingUsers = await db.select().from(users);
-  if (existingUsers.length > 0) return;
+  if (existingUsers.length > 0) {
+    const founder = existingUsers.find(u => u.role === "founder");
+    if (founder) {
+      const existingTypes = await db.select().from(showTypesTable);
+      if (existingTypes.length === 0) {
+        for (const typeName of defaultShowTypes) {
+          await storage.createShowType(typeName, founder.id);
+        }
+      }
+    }
+    return;
+  }
 
   const founder = await storage.createUser({
     username: "founder",
@@ -19,11 +40,15 @@ export async function seedDatabase() {
     displayName: "Haider Jamil",
   });
 
+  for (const typeName of defaultShowTypes) {
+    await storage.createShowType(typeName, founder.id);
+  }
+
   const seedShows = [
     {
       title: "Annual Drum Night",
       city: "Karachi",
-      showType: "Public" as const,
+      showType: "Public",
       organizationName: null,
       totalAmount: 150000,
       advancePayment: 50000,
@@ -35,7 +60,7 @@ export async function seedDatabase() {
     {
       title: "Corporate Team Building",
       city: "Lahore",
-      showType: "Corporate" as const,
+      showType: "Corporate",
       organizationName: "Jazz Telecom",
       totalAmount: 250000,
       advancePayment: 125000,
@@ -47,7 +72,7 @@ export async function seedDatabase() {
     {
       title: "LUMS Culture Fest",
       city: "Lahore",
-      showType: "University" as const,
+      showType: "University",
       organizationName: "LUMS",
       totalAmount: 100000,
       advancePayment: 100000,
@@ -59,7 +84,7 @@ export async function seedDatabase() {
     {
       title: "Private Birthday Celebration",
       city: "Islamabad",
-      showType: "Private" as const,
+      showType: "Private",
       organizationName: null,
       totalAmount: 80000,
       advancePayment: 40000,
@@ -71,7 +96,7 @@ export async function seedDatabase() {
     {
       title: "Unilever Annual Gala",
       city: "Karachi",
-      showType: "Corporate" as const,
+      showType: "Corporate",
       organizationName: "Unilever Pakistan",
       totalAmount: 300000,
       advancePayment: 150000,
@@ -86,5 +111,5 @@ export async function seedDatabase() {
     await db.insert(shows).values(show);
   }
 
-  console.log("Database seeded with Haider Jamil account, sample shows, and band members");
+  console.log("Database seeded with Haider Jamil account, sample shows, show types, and band members");
 }
