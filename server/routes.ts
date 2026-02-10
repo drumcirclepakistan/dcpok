@@ -859,9 +859,9 @@ export async function registerRoutes(
 
   app.post("/api/show-types", requireAdmin, async (req, res) => {
     try {
-      const { name } = req.body;
+      const { name, showOrgField, showPublicField } = req.body;
       if (!name || !name.trim()) return res.status(400).json({ message: "Name is required" });
-      const created = await storage.createShowType(name.trim(), req.session.userId!);
+      const created = await storage.createShowType(name.trim(), req.session.userId!, !!showOrgField, !!showPublicField);
       res.json(created);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Failed to create show type" });
@@ -870,13 +870,13 @@ export async function registerRoutes(
 
   app.patch("/api/show-types/:id", requireAdmin, async (req, res) => {
     try {
-      const { name } = req.body;
+      const { name, showOrgField, showPublicField } = req.body;
       if (!name || !name.trim()) return res.status(400).json({ message: "Name is required" });
       const existing = await storage.getShowType(req.params.id as string);
       if (!existing) return res.status(404).json({ message: "Show type not found" });
       const oldName = existing.name;
       const newName = name.trim();
-      const updated = await storage.updateShowType(req.params.id as string, newName);
+      const updated = await storage.updateShowType(req.params.id as string, newName, showOrgField, showPublicField);
       if (!updated) return res.status(404).json({ message: "Show type not found" });
       if (oldName !== newName) {
         await storage.renameShowTypeInShows(oldName, newName);

@@ -63,7 +63,7 @@ export default function ShowForm() {
     enabled: isEditing,
   });
 
-  const { data: showTypes = [] } = useQuery<{ id: string; name: string }[]>({
+  const { data: showTypes = [] } = useQuery<{ id: string; name: string; showOrgField: boolean; showPublicField: boolean }[]>({
     queryKey: ["/api/show-types"],
   });
 
@@ -171,6 +171,11 @@ export default function ShowForm() {
     setPendingData(null);
   };
 
+  const selectedShowType = form.watch("showType");
+  const selectedTypeConfig = showTypes.find(t => t.name === selectedShowType);
+  const showOrgField = selectedTypeConfig?.showOrgField ?? false;
+  const showPublicField = selectedTypeConfig?.showPublicField ?? false;
+
   if (isEditing && isLoadingShow) {
     return (
       <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
@@ -266,43 +271,47 @@ export default function ShowForm() {
                 />
               </div>
 
-              <FormField
-                control={form.control}
-                name="organizationName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Organization Name (Optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        value={field.value || ""}
-                        data-testid="input-organization"
-                        placeholder="e.g. Unilever, Jazz, LUMS"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {showOrgField && (
+                <FormField
+                  control={form.control}
+                  name="organizationName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Organization Name (Optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          data-testid="input-organization"
+                          placeholder="e.g. Unilever, Jazz, LUMS"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
-              <FormField
-                control={form.control}
-                name="publicShowFor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Public Show For (Optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        value={field.value || ""}
-                        data-testid="input-public-show-for"
-                        placeholder="e.g. Cafe Aylanto, Monal Restaurant"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {showPublicField && (
+                <FormField
+                  control={form.control}
+                  name="publicShowFor"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Public Show For (Optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          data-testid="input-public-show-for"
+                          placeholder="e.g. Cafe Aylanto, Monal Restaurant"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <FormField
                 control={form.control}

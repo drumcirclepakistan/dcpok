@@ -18,7 +18,7 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - Upcoming count and pending payments always show full data regardless of time range
 - Full show CRUD (add, view, edit, delete)
 - Duplicate date warning: Shows alert when adding/editing a show on a date with existing shows
-- **Dynamic show types**: Managed via Settings (add/edit/remove), stored in show_types table
+- **Dynamic show types**: Managed via Settings (add/edit/remove), stored in show_types table with configurable field flags (showOrgField, showPublicField) per type
 - Organization tracking for Corporate/University shows
 - "Public Show For" field for Public shows (e.g. cafe, restaurant name)
 - Financial tracking: total amount, advance payment, pending amount

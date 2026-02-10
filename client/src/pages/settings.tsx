@@ -75,6 +75,8 @@ interface BandMember {
 interface ShowType {
   id: string;
   name: string;
+  showOrgField: boolean;
+  showPublicField: boolean;
 }
 
 const roleOptions = [
@@ -353,6 +355,8 @@ export default function SettingsPage() {
   const [newTypeName, setNewTypeName] = useState("");
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
   const [editTypeName, setEditTypeName] = useState("");
+  const [editTypeOrgField, setEditTypeOrgField] = useState(false);
+  const [editTypePublicField, setEditTypePublicField] = useState(false);
 
   const addTypeMutation = useMutation({
     mutationFn: (name: string) => apiRequest("POST", "/api/show-types", { name }),
@@ -367,8 +371,8 @@ export default function SettingsPage() {
   });
 
   const updateTypeMutation = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) =>
-      apiRequest("PATCH", `/api/show-types/${id}`, { name }),
+    mutationFn: ({ id, name, showOrgField, showPublicField }: { id: string; name: string; showOrgField?: boolean; showPublicField?: boolean }) =>
+      apiRequest("PATCH", `/api/show-types/${id}`, { name, showOrgField, showPublicField }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/show-types"] });
       setEditingTypeId(null);
@@ -864,36 +868,69 @@ export default function SettingsPage() {
               data-testid={`show-type-${type.id}`}
             >
               {editingTypeId === type.id ? (
-                <div className="flex items-center gap-2 flex-1 flex-wrap">
-                  <Input
-                    value={editTypeName}
-                    onChange={(e) => setEditTypeName(e.target.value)}
-                    className="flex-1 min-w-[120px]"
-                    data-testid={`input-edit-type-${type.id}`}
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      if (editTypeName.trim()) {
-                        updateTypeMutation.mutate({ id: type.id, name: editTypeName.trim() });
-                      }
-                    }}
-                    disabled={updateTypeMutation.isPending}
-                    data-testid={`button-save-type-${type.id}`}
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setEditingTypeId(null)}
-                  >
-                    Cancel
-                  </Button>
+                <div className="flex flex-col gap-2 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Input
+                      value={editTypeName}
+                      onChange={(e) => setEditTypeName(e.target.value)}
+                      className="flex-1 min-w-[120px]"
+                      data-testid={`input-edit-type-${type.id}`}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (editTypeName.trim()) {
+                          updateTypeMutation.mutate({
+                            id: type.id,
+                            name: editTypeName.trim(),
+                            showOrgField: editTypeOrgField,
+                            showPublicField: editTypePublicField,
+                          });
+                        }
+                      }}
+                      disabled={updateTypeMutation.isPending}
+                      data-testid={`button-save-type-${type.id}`}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingTypeId(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editTypeOrgField}
+                        onChange={(e) => setEditTypeOrgField(e.target.checked)}
+                        data-testid={`checkbox-org-field-${type.id}`}
+                      />
+                      <span className="text-muted-foreground">Show Organization field</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editTypePublicField}
+                        onChange={(e) => setEditTypePublicField(e.target.checked)}
+                        data-testid={`checkbox-public-field-${type.id}`}
+                      />
+                      <span className="text-muted-foreground">Show "Public Show For" field</span>
+                    </label>
+                  </div>
                 </div>
               ) : (
                 <>
-                  <span className="text-sm">{type.name}</span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm">{type.name}</span>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {type.showOrgField && <span>Organization</span>}
+                      {type.showPublicField && <span>Public Show For</span>}
+                    </div>
+                  </div>
                   <div className="flex items-center gap-1">
                     <Button
                       size="icon"
@@ -901,6 +938,8 @@ export default function SettingsPage() {
                       onClick={() => {
                         setEditingTypeId(type.id);
                         setEditTypeName(type.name);
+                        setEditTypeOrgField(type.showOrgField);
+                        setEditTypePublicField(type.showPublicField);
                       }}
                       data-testid={`button-edit-type-${type.id}`}
                     >

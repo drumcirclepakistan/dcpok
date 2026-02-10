@@ -27,7 +27,9 @@ export async function seedDatabase() {
       const existingTypes = await db.select().from(showTypesTable);
       if (existingTypes.length === 0) {
         for (const typeName of defaultShowTypes) {
-          await storage.createShowType(typeName, founder.id);
+          const showOrgField = typeName === "Corporate" || typeName === "University";
+          const showPublicField = typeName === "Public";
+          await storage.createShowType(typeName, founder.id, showOrgField, showPublicField);
         }
       }
     }
@@ -41,7 +43,9 @@ export async function seedDatabase() {
   });
 
   for (const typeName of defaultShowTypes) {
-    await storage.createShowType(typeName, founder.id);
+    const showOrgField = typeName === "Corporate" || typeName === "University";
+    const showPublicField = typeName === "Public";
+    await storage.createShowType(typeName, founder.id, showOrgField, showPublicField);
   }
 
   const seedShows = [

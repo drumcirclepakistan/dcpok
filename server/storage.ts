@@ -61,10 +61,10 @@ export interface IStorage {
   updateUser(id: string, data: Partial<{ password: string; displayName: string; role: string }>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
 
-  getShowTypes(userId: string): Promise<{ id: string; name: string; userId: string }[]>;
-  getShowType(id: string): Promise<{ id: string; name: string; userId: string } | undefined>;
-  createShowType(name: string, userId: string): Promise<{ id: string; name: string; userId: string }>;
-  updateShowType(id: string, name: string): Promise<{ id: string; name: string; userId: string } | undefined>;
+  getShowTypes(userId: string): Promise<{ id: string; name: string; userId: string; showOrgField: boolean; showPublicField: boolean }[]>;
+  getShowType(id: string): Promise<{ id: string; name: string; userId: string; showOrgField: boolean; showPublicField: boolean } | undefined>;
+  createShowType(name: string, userId: string, showOrgField?: boolean, showPublicField?: boolean): Promise<{ id: string; name: string; userId: string; showOrgField: boolean; showPublicField: boolean }>;
+  updateShowType(id: string, name: string, showOrgField?: boolean, showPublicField?: boolean): Promise<{ id: string; name: string; userId: string; showOrgField: boolean; showPublicField: boolean } | undefined>;
   renameShowTypeInShows(oldName: string, newName: string): Promise<void>;
   deleteShowType(id: string): Promise<boolean>;
 }
@@ -226,22 +226,25 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
-  async getShowTypes(userId: string): Promise<{ id: string; name: string; userId: string }[]> {
+  async getShowTypes(userId: string): Promise<{ id: string; name: string; userId: string; showOrgField: boolean; showPublicField: boolean }[]> {
     return db.select().from(showTypesTable).where(eq(showTypesTable.userId, userId));
   }
 
-  async getShowType(id: string): Promise<{ id: string; name: string; userId: string } | undefined> {
+  async getShowType(id: string): Promise<{ id: string; name: string; userId: string; showOrgField: boolean; showPublicField: boolean } | undefined> {
     const [found] = await db.select().from(showTypesTable).where(eq(showTypesTable.id, id));
     return found;
   }
 
-  async createShowType(name: string, userId: string): Promise<{ id: string; name: string; userId: string }> {
-    const [created] = await db.insert(showTypesTable).values({ name, userId }).returning();
+  async createShowType(name: string, userId: string, showOrgField = false, showPublicField = false): Promise<{ id: string; name: string; userId: string; showOrgField: boolean; showPublicField: boolean }> {
+    const [created] = await db.insert(showTypesTable).values({ name, userId, showOrgField, showPublicField }).returning();
     return created;
   }
 
-  async updateShowType(id: string, name: string): Promise<{ id: string; name: string; userId: string } | undefined> {
-    const [updated] = await db.update(showTypesTable).set({ name }).where(eq(showTypesTable.id, id)).returning();
+  async updateShowType(id: string, name: string, showOrgField?: boolean, showPublicField?: boolean): Promise<{ id: string; name: string; userId: string; showOrgField: boolean; showPublicField: boolean } | undefined> {
+    const setData: Record<string, any> = { name };
+    if (showOrgField !== undefined) setData.showOrgField = showOrgField;
+    if (showPublicField !== undefined) setData.showPublicField = showPublicField;
+    const [updated] = await db.update(showTypesTable).set(setData).where(eq(showTypesTable.id, id)).returning();
     return updated;
   }
 

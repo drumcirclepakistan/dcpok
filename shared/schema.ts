@@ -68,6 +68,8 @@ export const showTypesTable = pgTable("show_types", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   userId: varchar("user_id").notNull(),
+  showOrgField: boolean("show_org_field").default(false).notNull(),
+  showPublicField: boolean("show_public_field").default(false).notNull(),
 });
 
 export const memberRoleEnum = pgEnum("member_role", ["session_player", "manager", "other"]);
