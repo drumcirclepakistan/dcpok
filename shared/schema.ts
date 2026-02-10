@@ -38,6 +38,8 @@ export const shows = pgTable("shows", {
   pocPhone: text("poc_phone"),
   pocEmail: text("poc_email"),
   isPaid: boolean("is_paid").notNull().default(false),
+  numberOfDrums: integer("number_of_drums"),
+  location: text("location"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   userId: varchar("user_id").notNull(),
 });
@@ -57,6 +59,8 @@ export const insertShowSchema = createInsertSchema(shows).omit({
   pocEmail: z.string().optional().nullable(),
   publicShowFor: z.string().optional().nullable(),
   isPaid: z.boolean().optional(),
+  numberOfDrums: z.coerce.number().min(0).optional().nullable(),
+  location: z.string().optional().nullable(),
 });
 
 export type InsertShow = z.infer<typeof insertShowSchema>;
