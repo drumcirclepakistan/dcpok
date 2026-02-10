@@ -202,6 +202,17 @@ export async function registerRoutes(
       }
       req.session.userId = user.id;
       const { password: _, ...safeUser } = user;
+      if (user.role === "member") {
+        const bandMember = await storage.getBandMemberByUserId(user.id);
+        return res.json({
+          ...safeUser,
+          bandMemberId: bandMember?.id || null,
+          bandMemberName: bandMember?.name || null,
+          canAddShows: bandMember?.canAddShows || false,
+          canEditName: bandMember?.canEditName || false,
+          canViewAmounts: bandMember?.canViewAmounts || false,
+        });
+      }
       res.json(safeUser);
     } catch (err) {
       res.status(500).json({ message: "Login failed" });
