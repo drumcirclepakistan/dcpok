@@ -29,9 +29,9 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, MapPin, Calendar, Building2, DollarSign, Pencil, Trash2,
+  ArrowLeft, MapPin, Calendar, Building2, Pencil, Trash2,
   StickyNote, User, Phone, Mail, Plus, X, Users, Receipt, Calculator,
-  Loader2,
+  Loader2, CheckCircle, AlertCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useMemo } from "react";
@@ -49,6 +49,27 @@ interface MemberFormRow {
   paymentType: "percentage" | "fixed" | "manual";
   paymentValue: number;
   isReferrer: boolean;
+}
+
+function calculateZainPayout(
+  paymentValue: number,
+  isReferrer: boolean,
+  showTotal: number,
+  netAmount: number,
+  totalExpenses: number
+): number {
+  if (isReferrer) {
+    return Math.round((paymentValue / 100) * netAmount);
+  }
+  if (showTotal < 100000) {
+    const base = 15000;
+    if (totalExpenses === 0) {
+      return base;
+    }
+    const expenseDeduction = Math.round((paymentValue / 100) * totalExpenses);
+    return Math.max(0, base - expenseDeduction);
+  }
+  return Math.round((paymentValue / 100) * netAmount);
 }
 
 export default function ShowDetail() {
@@ -88,6 +109,19 @@ export default function ShowDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/shows"] });
       toast({ title: "Show deleted" });
       navigate("/shows");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const togglePaidMutation = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/shows/${id}/toggle-paid`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shows", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shows"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({ title: show?.isPaid ? "Marked as unpaid" : "Marked as paid" });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -137,7 +171,9 @@ export default function ShowDetail() {
   const calculatedMembers = useMemo(() => {
     return members.map((m) => {
       let calc = m.calculatedAmount;
-      if (m.paymentType === "percentage") {
+      if (m.name === "Zain Shahid" && m.paymentType === "percentage") {
+        calc = calculateZainPayout(m.paymentValue, m.isReferrer, show?.totalAmount || 0, netAmount, totalExpenses);
+      } else if (m.paymentType === "percentage") {
         calc = Math.round((m.paymentValue / 100) * netAmount);
       } else if (m.paymentType === "fixed") {
         calc = m.paymentValue;
@@ -146,7 +182,7 @@ export default function ShowDetail() {
       }
       return { ...m, calculatedAmount: calc };
     });
-  }, [members, netAmount]);
+  }, [members, netAmount, totalExpenses, show?.totalAmount]);
 
   const totalMemberPayouts = calculatedMembers.reduce((s, m) => s + m.calculatedAmount, 0);
   const founderPayout = netAmount - totalMemberPayouts;
@@ -203,23 +239,25 @@ export default function ShowDetail() {
     setMemberRows((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  const getFormRowCalc = (row: MemberFormRow): number => {
+    if (row.name === "Zain Shahid" && row.paymentType === "percentage") {
+      return calculateZainPayout(row.paymentValue, row.isReferrer, show?.totalAmount || 0, netAmount, totalExpenses);
+    }
+    if (row.paymentType === "percentage") {
+      return Math.round((row.paymentValue / 100) * netAmount);
+    }
+    return row.paymentValue;
+  };
+
   const handleSaveMembers = () => {
-    const membersData = memberRows.map((m) => {
-      let calc = 0;
-      if (m.paymentType === "percentage") {
-        calc = Math.round((m.paymentValue / 100) * netAmount);
-      } else {
-        calc = m.paymentValue;
-      }
-      return {
-        name: m.name,
-        role: m.role,
-        paymentType: m.paymentType,
-        paymentValue: m.paymentValue,
-        isReferrer: m.isReferrer,
-        calculatedAmount: calc,
-      };
-    });
+    const membersData = memberRows.map((m) => ({
+      name: m.name,
+      role: m.role,
+      paymentType: m.paymentType,
+      paymentValue: m.paymentValue,
+      isReferrer: m.isReferrer,
+      calculatedAmount: getFormRowCalc(m),
+    }));
     saveMembersMutation.mutate({ members: membersData });
   };
 
@@ -286,10 +324,36 @@ export default function ShowDetail() {
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <Badge variant={statusColors[show.status] as any}>{show.status}</Badge>
               <Badge variant="outline">{show.showType}</Badge>
+              {show.isPaid ? (
+                <Badge variant="secondary" className="text-[10px]" data-testid="badge-paid">
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Paid
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="text-[10px]" data-testid="badge-unpaid">
+                  <AlertCircle className="w-3 h-3 mr-1" />
+                  Unpaid
+                </Badge>
+              )}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant={show.isPaid ? "outline" : "default"}
+            onClick={() => togglePaidMutation.mutate()}
+            disabled={togglePaidMutation.isPending}
+            data-testid="button-toggle-paid"
+          >
+            {togglePaidMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : show.isPaid ? (
+              <AlertCircle className="w-4 h-4 mr-2" />
+            ) : (
+              <CheckCircle className="w-4 h-4 mr-2" />
+            )}
+            {show.isPaid ? "Mark Unpaid" : "Mark Paid"}
+          </Button>
           <Link href={`/shows/${id}/edit`}>
             <Button variant="outline" data-testid="button-edit-show">
               <Pencil className="w-4 h-4 mr-2" />
@@ -533,6 +597,9 @@ export default function ShowDetail() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-medium">{m.name}</p>
                           {m.isReferrer && <Badge variant="secondary" className="text-[10px]">Referred</Badge>}
+                          {m.name === "Zain Shahid" && !m.isReferrer && (show?.totalAmount || 0) < 100000 && (
+                            <Badge variant="outline" className="text-[10px]">Min 15K rule</Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground capitalize">
                           {m.role.replace("_", " ")}
@@ -605,12 +672,16 @@ export default function ShowDetail() {
                         </div>
                       )}
 
+                      {row.name === "Zain Shahid" && !row.isReferrer && (show?.totalAmount || 0) < 100000 && (
+                        <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
+                          Show under Rs 100K: Base Rs 15,000
+                          {totalExpenses > 0 && ` minus ${row.paymentValue}% of expenses (Rs ${Math.round((row.paymentValue / 100) * totalExpenses).toLocaleString()})`}
+                        </p>
+                      )}
+
                       <p className="text-xs text-muted-foreground">
                         Calculated: <span className="font-semibold text-foreground">
-                          Rs {row.paymentType === "percentage"
-                            ? Math.round((row.paymentValue / 100) * netAmount).toLocaleString()
-                            : row.paymentValue.toLocaleString()
-                          }
+                          Rs {getFormRowCalc(row).toLocaleString()}
                         </span>
                       </p>
                     </div>
@@ -690,6 +761,9 @@ export default function ShowDetail() {
                         ({m.paymentType === "percentage" ? `${m.paymentValue}%` : "Fixed"})
                       </span>
                       {m.isReferrer && <span className="text-xs text-primary ml-1">(Referral)</span>}
+                      {m.name === "Zain Shahid" && !m.isReferrer && show.totalAmount < 100000 && (
+                        <span className="text-xs text-muted-foreground ml-1">(Min 15K rule)</span>
+                      )}
                     </div>
                     <span className="text-sm font-semibold flex-shrink-0">
                       Rs {m.calculatedAmount.toLocaleString()}

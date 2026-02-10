@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarPlus, Search, ListMusic, Filter } from "lucide-react";
+import { CalendarPlus, Search, ListMusic, Filter, AlertCircle, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
@@ -31,6 +31,7 @@ export default function ShowsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [paidFilter, setPaidFilter] = useState("all");
 
   const { data: shows, isLoading } = useQuery<Show[]>({
     queryKey: ["/api/shows"],
@@ -47,10 +48,88 @@ export default function ShowsPage() {
           s.organizationName?.toLowerCase().includes(search.toLowerCase());
         const matchesStatus = statusFilter === "all" || s.status === statusFilter;
         const matchesType = typeFilter === "all" || s.showType === typeFilter;
-        return matchesSearch && matchesStatus && matchesType;
+        const matchesPaid = paidFilter === "all" || (paidFilter === "paid" ? s.isPaid : !s.isPaid);
+        return matchesSearch && matchesStatus && matchesType && matchesPaid;
+      });
+  }, [shows, search, statusFilter, typeFilter, paidFilter]);
+
+  const unpaidCompleted = useMemo(() => {
+    return filtered
+      .filter((s) => {
+        const isCompleted = s.status === "completed" || new Date(s.showDate) < new Date();
+        return isCompleted && !s.isPaid;
       })
+      .sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime());
+  }, [filtered]);
+
+  const otherShows = useMemo(() => {
+    const unpaidCompletedIds = new Set(unpaidCompleted.map((s) => s.id));
+    return filtered
+      .filter((s) => !unpaidCompletedIds.has(s.id))
       .sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime());
-  }, [shows, search, statusFilter, typeFilter]);
+  }, [filtered, unpaidCompleted]);
+
+  const renderShowCard = (show: Show, isAlert: boolean) => {
+    const isOverdue = !show.isPaid && (show.status === "completed" || new Date(show.showDate) < new Date());
+    return (
+      <Link key={show.id} href={`/shows/${show.id}`}>
+        <Card
+          className={`hover-elevate cursor-pointer ${isAlert ? "border-destructive/40" : ""}`}
+          data-testid={`card-show-${show.id}`}
+        >
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-medium text-sm" data-testid={`text-show-title-${show.id}`}>
+                    {show.title}
+                  </p>
+                  <Badge variant={statusColors[show.status] as any} className="text-[10px]">
+                    {show.status}
+                  </Badge>
+                  {show.isPaid ? (
+                    <Badge variant="secondary" className="text-[10px]">
+                      <CheckCircle className="w-2.5 h-2.5 mr-0.5" />
+                      Paid
+                    </Badge>
+                  ) : isOverdue ? (
+                    <Badge variant="destructive" className="text-[10px]">
+                      <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
+                      Unpaid
+                    </Badge>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="text-xs text-muted-foreground">{show.city}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {format(new Date(show.showDate), "MMM d, yyyy 'at' h:mm a")}
+                  </span>
+                </div>
+                {show.organizationName && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {show.organizationName}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                <Badge variant={showTypeBadgeVariant(show.showType) as any}>
+                  {show.showType}
+                </Badge>
+                <span className="text-sm font-semibold" data-testid={`text-show-amount-${show.id}`}>
+                  Rs {show.totalAmount.toLocaleString()}
+                </span>
+                {show.advancePayment > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Advance: Rs {show.advancePayment.toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+    );
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-5xl mx-auto">
@@ -104,6 +183,16 @@ export default function ShowsPage() {
             <SelectItem value="University">University</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={paidFilter} onValueChange={setPaidFilter}>
+          <SelectTrigger className="w-[120px]" data-testid="select-paid-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="unpaid">Unpaid</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {isLoading ? (
@@ -145,51 +234,27 @@ export default function ShowsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((show) => (
-            <Link key={show.id} href={`/shows/${show.id}`}>
-              <Card className="hover-elevate cursor-pointer" data-testid={`card-show-${show.id}`}>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm" data-testid={`text-show-title-${show.id}`}>
-                          {show.title}
-                        </p>
-                        <Badge variant={statusColors[show.status] as any} className="text-[10px]">
-                          {show.status}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                        <span className="text-xs text-muted-foreground">{show.city}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(show.showDate), "MMM d, yyyy 'at' h:mm a")}
-                        </span>
-                      </div>
-                      {show.organizationName && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {show.organizationName}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                      <Badge variant={showTypeBadgeVariant(show.showType) as any}>
-                        {show.showType}
-                      </Badge>
-                      <span className="text-sm font-semibold" data-testid={`text-show-amount-${show.id}`}>
-                        Rs {show.totalAmount.toLocaleString()}
-                      </span>
-                      {show.advancePayment > 0 && (
-                        <span className="text-[10px] text-muted-foreground">
-                          Advance: Rs {show.advancePayment.toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+        <div className="space-y-4">
+          {unpaidCompleted.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-destructive" />
+                <h3 className="text-sm font-semibold text-destructive" data-testid="text-action-required">
+                  Action Required - Unpaid Shows ({unpaidCompleted.length})
+                </h3>
+              </div>
+              {unpaidCompleted.map((show) => renderShowCard(show, true))}
+            </div>
+          )}
+
+          {otherShows.length > 0 && (
+            <div className="space-y-2">
+              {unpaidCompleted.length > 0 && (
+                <h3 className="text-sm font-semibold text-muted-foreground mt-2">All Shows</h3>
+              )}
+              {otherShows.map((show) => renderShowCard(show, false))}
+            </div>
+          )}
         </div>
       )}
     </div>

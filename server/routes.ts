@@ -96,6 +96,7 @@ export async function registerRoutes(
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_name TEXT`);
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_phone TEXT`);
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_email TEXT`);
+  await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT false`);
 
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS show_expenses (
@@ -306,6 +307,100 @@ export async function registerRoutes(
       res.json(created);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Invalid member data" });
+    }
+  });
+
+  // Toggle paid status
+  app.patch("/api/shows/:id/toggle-paid", requireAuth, async (req, res) => {
+    try {
+      const existing = await storage.getShow(req.params.id as string);
+      if (!existing || existing.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Show not found" });
+      }
+      const updated = await storage.updateShow(req.params.id as string, {
+        isPaid: !existing.isPaid,
+      } as any);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Update failed" });
+    }
+  });
+
+  // Dashboard stats with time range
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    try {
+      const allShows = await storage.getShows(req.session.userId!);
+      const { from, to } = req.query as { from?: string; to?: string };
+
+      let filteredShows = allShows;
+      if (from) {
+        const fromDate = new Date(from as string);
+        filteredShows = filteredShows.filter((s) => new Date(s.showDate) >= fromDate);
+      }
+      if (to) {
+        const toDate = new Date(to as string);
+        filteredShows = filteredShows.filter((s) => new Date(s.showDate) <= toDate);
+      }
+
+      let totalExpenses = 0;
+      let totalMemberPayouts = 0;
+
+      for (const show of filteredShows) {
+        const expenses = await storage.getShowExpenses(show.id);
+        const expenseSum = expenses.reduce((s, e) => s + e.amount, 0);
+        totalExpenses += expenseSum;
+
+        const members = await storage.getShowMembers(show.id);
+        const net = show.totalAmount - expenseSum;
+        let memberPayout = 0;
+        for (const m of members) {
+          if (m.paymentType === "percentage") {
+            memberPayout += Math.round((m.paymentValue / 100) * net);
+          } else {
+            memberPayout += m.paymentValue;
+          }
+        }
+        totalMemberPayouts += memberPayout;
+      }
+
+      const totalRevenue = filteredShows.reduce((s, sh) => s + sh.totalAmount, 0);
+      const revenueAfterExpenses = totalRevenue - totalExpenses;
+      const founderRevenue = revenueAfterExpenses - totalMemberPayouts;
+
+      const cityCount: Record<string, number> = {};
+      const typeCount: Record<string, number> = {};
+      for (const show of filteredShows) {
+        cityCount[show.city] = (cityCount[show.city] || 0) + 1;
+        typeCount[show.showType] = (typeCount[show.showType] || 0) + 1;
+      }
+
+      const topCities = Object.entries(cityCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([city, count]) => ({ city, count }));
+
+      const topTypes = Object.entries(typeCount)
+        .sort((a, b) => b[1] - a[1])
+        .map(([type, count]) => ({ type, count }));
+
+      const upcomingCount = allShows.filter((s) => s.status === "upcoming").length;
+      const pendingAmount = allShows
+        .filter((s) => !s.isPaid)
+        .reduce((s, sh) => s + (sh.totalAmount - sh.advancePayment), 0);
+
+      res.json({
+        totalShows: filteredShows.length,
+        totalRevenue,
+        totalExpenses,
+        revenueAfterExpenses,
+        founderRevenue,
+        upcomingCount,
+        pendingAmount,
+        topCities,
+        topTypes,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to compute stats" });
     }
   });
 
