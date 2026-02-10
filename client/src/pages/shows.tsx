@@ -67,7 +67,16 @@ export default function ShowsPage() {
     const unpaidCompletedIds = new Set(unpaidCompleted.map((s) => s.id));
     return filtered
       .filter((s) => !unpaidCompletedIds.has(s.id))
-      .sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime());
+      .sort((a, b) => {
+        const aUpcoming = a.status === "upcoming";
+        const bUpcoming = b.status === "upcoming";
+        if (aUpcoming && bUpcoming) {
+          return new Date(a.showDate).getTime() - new Date(b.showDate).getTime();
+        }
+        if (aUpcoming) return -1;
+        if (bUpcoming) return 1;
+        return new Date(b.showDate).getTime() - new Date(a.showDate).getTime();
+      });
   }, [filtered, unpaidCompleted]);
 
   const renderShowCard = (show: Show, isAlert: boolean) => {
@@ -97,6 +106,11 @@ export default function ShowsPage() {
                     <Badge variant="destructive" className="text-[10px]">
                       <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
                       Unpaid
+                    </Badge>
+                  ) : show.status === "upcoming" && show.advancePayment === 0 ? (
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                      <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
+                      Advance not paid
                     </Badge>
                   ) : null}
                 </div>

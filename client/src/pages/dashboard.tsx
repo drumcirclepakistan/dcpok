@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -10,15 +10,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { useAuth } from "@/lib/auth";
 import {
   CalendarDays, TrendingUp, Music, MapPin, Layers,
-  Wallet, Receipt, Crown, AlertCircle,
+  Wallet, Receipt, Crown, AlertCircle, Calendar as CalendarIcon,
 } from "lucide-react";
-import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths, subYears } from "date-fns";
+import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths, subYears, endOfDay } from "date-fns";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
 import type { Show } from "@shared/schema";
+
+interface CustomDateRange {
+  from?: Date;
+  to?: Date;
+}
 
 type TimeRange = "lifetime" | "this_year" | "last_year" | "this_month" | "last_month" | "last_3_months" | "last_6_months" | "custom";
 
@@ -34,7 +41,7 @@ interface DashboardStats {
   topTypes: { type: string; count: number }[];
 }
 
-function getDateRange(range: TimeRange, customFrom: string, customTo: string): { from?: string; to?: string } {
+function getDateRange(range: TimeRange, customRange: CustomDateRange | undefined): { from?: string; to?: string } {
   const now = new Date();
   switch (range) {
     case "lifetime":
@@ -57,8 +64,8 @@ function getDateRange(range: TimeRange, customFrom: string, customTo: string): {
       return { from: subMonths(now, 6).toISOString(), to: now.toISOString() };
     case "custom":
       return {
-        from: customFrom ? new Date(customFrom).toISOString() : undefined,
-        to: customTo ? new Date(customTo + "T23:59:59").toISOString() : undefined,
+        from: customRange?.from ? customRange.from.toISOString() : undefined,
+        to: customRange?.to ? endOfDay(customRange.to).toISOString() : undefined,
       };
     default:
       return {};
@@ -137,10 +144,9 @@ const timeRangeLabels: Record<TimeRange, string> = {
 export default function Dashboard() {
   const { user } = useAuth();
   const [timeRange, setTimeRange] = useState<TimeRange>("lifetime");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const [customRange, setCustomRange] = useState<CustomDateRange | undefined>();
 
-  const dateRange = useMemo(() => getDateRange(timeRange, customFrom, customTo), [timeRange, customFrom, customTo]);
+  const dateRange = useMemo(() => getDateRange(timeRange, customRange), [timeRange, customRange]);
 
   const statsQueryKey = useMemo(() => {
     const params = new URLSearchParams();
@@ -194,26 +200,31 @@ export default function Dashboard() {
       </div>
 
       {timeRange === "custom" && (
-        <div className="flex items-end gap-3 flex-wrap">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">From</label>
-            <Input
-              type="date"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              data-testid="input-custom-from"
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="justify-start text-left font-normal" data-testid="button-custom-range">
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {customRange?.from ? (
+                customRange.to ? (
+                  <span>{format(customRange.from, "MMM d, yyyy")} - {format(customRange.to, "MMM d, yyyy")}</span>
+                ) : (
+                  <span>{format(customRange.from, "MMM d, yyyy")} - Pick end date</span>
+                )
+              ) : (
+                <span className="text-muted-foreground">Pick a date range</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="range"
+              selected={customRange as any}
+              onSelect={(range: any) => setCustomRange(range)}
+              numberOfMonths={2}
+              data-testid="calendar-range-picker"
             />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">To</label>
-            <Input
-              type="date"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              data-testid="input-custom-to"
-            />
-          </div>
-        </div>
+          </PopoverContent>
+        </Popover>
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
@@ -370,10 +381,10 @@ export default function Dashboard() {
                           <p className="font-medium text-sm truncate" data-testid={`text-show-title-${show.id}`}>
                             {show.title}
                           </p>
-                          {!show.isPaid && (
-                            <Badge variant="destructive" className="text-[10px]">
+                          {show.advancePayment === 0 && (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground">
                               <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
-                              Unpaid
+                              Advance not paid
                             </Badge>
                           )}
                         </div>
