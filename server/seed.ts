@@ -9,7 +9,7 @@ export async function seedDatabase() {
   const founder = await storage.createUser({
     username: "founder",
     password: "drumcircle2024",
-    displayName: "Founder",
+    displayName: "Haider Jamil",
   });
 
   const seedShows = [
@@ -79,5 +79,5 @@ export async function seedDatabase() {
     await db.insert(shows).values(show);
   }
 
-  console.log("Database seeded with founder account and sample shows");
+  console.log("Database seeded with Haider Jamil account and sample shows");
 }

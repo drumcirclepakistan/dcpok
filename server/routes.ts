@@ -404,6 +404,142 @@ export async function registerRoutes(
     }
   });
 
+  // Financials per-member stats
+  app.get("/api/financials", requireAuth, async (req, res) => {
+    try {
+      const allShows = await storage.getShows(req.session.userId!);
+      const { from, to, member } = req.query as { from?: string; to?: string; member?: string };
+
+      let filteredShows = allShows;
+      if (from) {
+        const fromDate = new Date(from);
+        filteredShows = filteredShows.filter((s) => new Date(s.showDate) >= fromDate);
+      }
+      if (to) {
+        const toDate = new Date(to);
+        filteredShows = filteredShows.filter((s) => new Date(s.showDate) <= toDate);
+      }
+
+      const appSettings = await storage.getSettings(req.session.userId!);
+      const settingsMap: Record<string, string> = { ...defaultSettings };
+      for (const s of appSettings) {
+        settingsMap[s.key] = s.value;
+      }
+
+      const calculateZainPayout = (
+        paymentValue: number,
+        isReferrer: boolean,
+        showTotal: number,
+        netAmount: number,
+        totalExpenses: number
+      ): number => {
+        if (isReferrer) return Math.round((paymentValue / 100) * netAmount);
+        if (showTotal < 100000) {
+          const base = 15000;
+          if (totalExpenses === 0) return base;
+          const deduction = Math.round((paymentValue / 100) * totalExpenses);
+          return Math.max(0, base - deduction);
+        }
+        return Math.round((paymentValue / 100) * netAmount);
+      };
+
+      interface ShowDetail {
+        id: string;
+        title: string;
+        city: string;
+        showDate: string;
+        showType: string;
+        totalAmount: number;
+        memberEarning: number;
+        isPaid: boolean;
+      }
+
+      const showDetails: ShowDetail[] = [];
+      let totalEarnings = 0;
+      let totalShowsParticipated = 0;
+      const citySet: Record<string, number> = {};
+
+      for (const show of filteredShows) {
+        const expenses = await storage.getShowExpenses(show.id);
+        const expenseSum = expenses.reduce((s, e) => s + e.amount, 0);
+        const net = show.totalAmount - expenseSum;
+        const members = await storage.getShowMembers(show.id);
+
+        let memberEarning = 0;
+        let participated = false;
+
+        if (member === "Haider Jamil") {
+          // Haider gets remainder after expenses and all member payouts
+          let totalMemberPayouts = 0;
+          for (const m of members) {
+            if (m.name === "Zain Shahid" && m.paymentType === "percentage") {
+              totalMemberPayouts += calculateZainPayout(m.paymentValue, m.isReferrer, show.totalAmount, net, expenseSum);
+            } else if (m.paymentType === "percentage") {
+              totalMemberPayouts += Math.round((m.paymentValue / 100) * net);
+            } else {
+              totalMemberPayouts += m.paymentValue;
+            }
+          }
+          memberEarning = net - totalMemberPayouts;
+          participated = true;
+        } else {
+          // Find specific member in show
+          const found = members.find((m) => m.name === member);
+          if (found) {
+            participated = true;
+            if (found.name === "Zain Shahid" && found.paymentType === "percentage") {
+              memberEarning = calculateZainPayout(found.paymentValue, found.isReferrer, show.totalAmount, net, expenseSum);
+            } else if (found.paymentType === "percentage") {
+              memberEarning = Math.round((found.paymentValue / 100) * net);
+            } else {
+              memberEarning = found.paymentValue;
+            }
+          }
+        }
+
+        if (participated) {
+          totalShowsParticipated++;
+          totalEarnings += memberEarning;
+          citySet[show.city] = (citySet[show.city] || 0) + 1;
+          showDetails.push({
+            id: show.id,
+            title: show.title,
+            city: show.city,
+            showDate: show.showDate.toISOString(),
+            showType: show.showType,
+            totalAmount: show.totalAmount,
+            memberEarning,
+            isPaid: show.isPaid,
+          });
+        }
+      }
+
+      const cities = Object.entries(citySet)
+        .sort((a, b) => b[1] - a[1])
+        .map(([city, count]) => ({ city, count }));
+
+      const avgPerShow = totalShowsParticipated > 0 ? Math.round(totalEarnings / totalShowsParticipated) : 0;
+
+      const paidShows = showDetails.filter((s) => s.isPaid).length;
+      const unpaidShows = showDetails.filter((s) => !s.isPaid).length;
+      const unpaidAmount = showDetails.filter((s) => !s.isPaid).reduce((s, sh) => s + sh.memberEarning, 0);
+
+      res.json({
+        member: member || "Haider Jamil",
+        totalEarnings,
+        totalShows: totalShowsParticipated,
+        avgPerShow,
+        paidShows,
+        unpaidShows,
+        unpaidAmount,
+        cities,
+        shows: showDetails.sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to compute financials" });
+    }
+  });
+
   // Settings
   app.get("/api/settings", requireAuth, async (req, res) => {
     const userSettings = await storage.getSettings(req.session.userId!);

@@ -14,12 +14,13 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, CalendarPlus, ListMusic, LogOut, Drum, Settings } from "lucide-react";
+import { LayoutDashboard, CalendarPlus, ListMusic, LogOut, Drum, Settings, Wallet } from "lucide-react";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Shows", url: "/shows", icon: ListMusic },
   { title: "Add Show", url: "/shows/new", icon: CalendarPlus },
+  { title: "Financials", url: "/financials", icon: Wallet },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
@@ -82,10 +83,10 @@ export function AppSidebar() {
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate" data-testid="text-user-name">
-              {user?.displayName || "Founder"}
+              {user?.displayName || "Haider Jamil"}
             </p>
             <p className="text-xs text-muted-foreground truncate capitalize">
-              {user?.role || "founder"}
+              {user?.role === "founder" ? "Admin" : (user?.role || "Admin")}
             </p>
           </div>
           <Button

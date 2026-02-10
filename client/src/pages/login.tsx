@@ -115,7 +115,7 @@ export default function LoginPage() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Founder Access Only
+          Admin Access Only
         </p>
       </div>
     </div>

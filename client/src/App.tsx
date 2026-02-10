@@ -15,6 +15,7 @@ import ShowsPage from "@/pages/shows";
 import ShowForm from "@/pages/show-form";
 import ShowDetail from "@/pages/show-detail";
 import SettingsPage from "@/pages/settings";
+import FinancialsPage from "@/pages/financials";
 
 function Router() {
   return (
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/shows/new" component={ShowForm} />
       <Route path="/shows/:id/edit" component={ShowForm} />
       <Route path="/shows/:id" component={ShowDetail} />
+      <Route path="/financials" component={FinancialsPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>

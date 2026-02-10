@@ -181,7 +181,7 @@ export default function SettingsPage() {
               <p>Other players: Manual amount entered per show</p>
             </div>
             <p>4. Manager (Hassan) is paid Rs {Number(form.manager_default_rate).toLocaleString()} by default</p>
-            <p>5. The remaining amount goes to Haider Jamil (Founder)</p>
+            <p>5. The remaining amount goes to Haider Jamil (Admin)</p>
           </div>
         </CardContent>
       </Card>

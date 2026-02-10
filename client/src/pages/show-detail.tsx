@@ -590,9 +590,9 @@ export default function ShowDetail() {
                   <div className="py-2 border-b flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Haider Jamil</p>
-                      <p className="text-xs text-muted-foreground">Founder (Always present)</p>
+                      <p className="text-xs text-muted-foreground">Admin (Always present)</p>
                     </div>
-                    <Badge variant="outline">Founder</Badge>
+                    <Badge variant="outline">Admin</Badge>
                   </div>
 
                   {members.length === 0 && (
@@ -630,9 +630,9 @@ export default function ShowDetail() {
                   <div className="py-2 border-b flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Haider Jamil</p>
-                      <p className="text-xs text-muted-foreground">Founder (Always present)</p>
+                      <p className="text-xs text-muted-foreground">Admin (Always present)</p>
                     </div>
-                    <Badge variant="outline">Founder</Badge>
+                    <Badge variant="outline">Admin</Badge>
                   </div>
 
                   {memberRows.map((row, idx) => (
@@ -786,7 +786,7 @@ export default function ShowDetail() {
                 <div className="flex items-center justify-between gap-3 py-3 bg-primary/5 px-3 rounded-md">
                   <div>
                     <span className="text-sm font-bold">Haider Jamil</span>
-                    <span className="text-xs text-muted-foreground ml-2">(Founder)</span>
+                    <span className="text-xs text-muted-foreground ml-2">(Admin)</span>
                   </div>
                   <span className="text-lg font-bold text-primary" data-testid="text-payout-founder">
                     Rs {founderPayout.toLocaleString()}

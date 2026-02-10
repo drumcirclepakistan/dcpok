@@ -179,7 +179,7 @@ export default function Dashboard() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold" data-testid="text-welcome">
-            Welcome back, {user?.displayName || "Founder"}
+            Welcome back, {user?.displayName || "Haider Jamil"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Here's what's happening with Drum Circle Pakistan
@@ -253,7 +253,7 @@ export default function Dashboard() {
               testId="stat-revenue-after-expenses"
             />
             <StatCard
-              label="My Earnings (Founder)"
+              label="My Earnings"
               value={`Rs ${(stats?.founderRevenue || 0).toLocaleString()}`}
               icon={Crown}
               testId="stat-founder-revenue"
