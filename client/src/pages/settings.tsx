@@ -70,6 +70,8 @@ interface BandMember {
   hasMinLogic: boolean;
   minThreshold: number | null;
   minFlatRate: number | null;
+  canAddShows: boolean;
+  canEditName: boolean;
 }
 
 interface ShowType {
@@ -274,11 +276,11 @@ export default function SettingsPage() {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: ({ id, role, customRole }: { id: string; role: string; customRole?: string | null }) =>
-      apiRequest("PATCH", `/api/band-members/${id}`, { role, customRole }),
+    mutationFn: ({ id, ...data }: { id: string; role?: string; customRole?: string | null; canAddShows?: boolean; canEditName?: boolean }) =>
+      apiRequest("PATCH", `/api/band-members/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/band-members"] });
-      toast({ title: "Role updated" });
+      toast({ title: "Updated" });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -714,6 +716,41 @@ export default function SettingsPage() {
                   )}
                 </div>
               </div>
+
+              {member.userId && (
+                <>
+                  <Separator />
+                  <div className="flex items-center gap-4 flex-wrap" data-testid={`permissions-${member.id}`}>
+                    <p className="text-xs font-medium text-muted-foreground">Permissions:</p>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <Switch
+                        checked={member.canAddShows}
+                        onCheckedChange={(checked) => {
+                          updateRoleMutation.mutate({
+                            id: member.id,
+                            canAddShows: checked,
+                          });
+                        }}
+                        data-testid={`switch-can-add-shows-${member.id}`}
+                      />
+                      <span className="text-xs">Can Add Shows</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <Switch
+                        checked={member.canEditName}
+                        onCheckedChange={(checked) => {
+                          updateRoleMutation.mutate({
+                            id: member.id,
+                            canEditName: checked,
+                          });
+                        }}
+                        data-testid={`switch-can-edit-name-${member.id}`}
+                      />
+                      <span className="text-xs">Can Edit Name</span>
+                    </label>
+                  </div>
+                </>
+              )}
 
               <Separator />
 

@@ -19,6 +19,7 @@ import {
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths, subYears, endOfDay } from "date-fns";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
+import { useAuth } from "@/lib/auth";
 
 type TimeRange = "lifetime" | "this_year" | "last_year" | "this_month" | "last_month" | "last_3_months" | "last_6_months" | "custom";
 
@@ -111,12 +112,14 @@ const showTypeBadgeVariant = (type: string) => {
 };
 
 export default function FinancialsPage() {
+  const { isAdmin, isMember, user } = useAuth();
   const [selectedMember, setSelectedMember] = useState("Haider Jamil");
   const [timeRange, setTimeRange] = useState<TimeRange>("lifetime");
   const [customRange, setCustomRange] = useState<CustomDateRange | undefined>();
 
   const { data: bandMembers = [] } = useQuery<BandMemberInfo[]>({
     queryKey: ["/api/band-members"],
+    enabled: isAdmin,
   });
 
   const memberNames = useMemo(() => {
@@ -126,7 +129,7 @@ export default function FinancialsPage() {
 
   const dateRange = useMemo(() => getDateRange(timeRange, customRange), [timeRange, customRange]);
 
-  const queryUrl = useMemo(() => {
+  const adminQueryUrl = useMemo(() => {
     const params = new URLSearchParams();
     params.set("member", selectedMember);
     if (dateRange.from) params.set("from", dateRange.from);
@@ -134,10 +137,20 @@ export default function FinancialsPage() {
     return `/api/financials?${params.toString()}`;
   }, [selectedMember, dateRange]);
 
+  const memberQueryUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (dateRange.from) params.set("from", dateRange.from);
+    if (dateRange.to) params.set("to", dateRange.to);
+    return `/api/member/financials?${params.toString()}`;
+  }, [dateRange]);
+
   const { data: stats, isLoading } = useQuery<FinancialStats>({
-    queryKey: ["/api/financials", selectedMember, dateRange.from, dateRange.to],
+    queryKey: isMember
+      ? ["/api/member/financials", dateRange.from, dateRange.to]
+      : ["/api/financials", selectedMember, dateRange.from, dateRange.to],
     queryFn: async () => {
-      const res = await fetch(queryUrl, { credentials: "include" });
+      const url = isMember ? memberQueryUrl : adminQueryUrl;
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load financials");
       return res.json();
     },
@@ -146,26 +159,30 @@ export default function FinancialsPage() {
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-5xl mx-auto">
       <div>
-        <h1 className="text-xl font-bold" data-testid="text-financials-heading">Financials</h1>
+        <h1 className="text-xl font-bold" data-testid="text-financials-heading">
+          {isMember ? "My Financials" : "Financials"}
+        </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Detailed earnings and performance breakdown
+          {isMember ? "Your earnings and performance breakdown" : "Detailed earnings and performance breakdown"}
         </p>
       </div>
 
       <div className="flex items-end gap-2 flex-wrap">
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1 block">Member</label>
-          <Select value={selectedMember} onValueChange={setSelectedMember}>
-            <SelectTrigger className="w-[160px]" data-testid="select-member">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {memberNames.map((m) => (
-                <SelectItem key={m} value={m}>{m}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {isAdmin && (
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Member</label>
+            <Select value={selectedMember} onValueChange={setSelectedMember}>
+              <SelectTrigger className="w-[160px]" data-testid="select-member">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {memberNames.map((m) => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1 block">Period</label>
           <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
@@ -357,9 +374,9 @@ export default function FinancialsPage() {
                 Upcoming Shows ({stats?.upcomingShows?.length || 0})
               </h2>
               <div className="space-y-2">
-                {stats?.upcomingShows.map((show) => (
-                  <Link key={show.id} href={`/shows/${show.id}`}>
-                    <Card className="hover-elevate cursor-pointer" data-testid={`financial-upcoming-show-${show.id}`}>
+                {stats?.upcomingShows.map((show) => {
+                  const cardContent = (
+                    <Card className={`${isAdmin ? "hover-elevate cursor-pointer" : ""}`} data-testid={`financial-upcoming-show-${show.id}`}>
                       <CardContent className="pt-4 pb-4">
                         <div className="flex items-start justify-between gap-3 flex-wrap">
                           <div className="min-w-0 flex-1">
@@ -384,16 +401,31 @@ export default function FinancialsPage() {
                             <span className="text-sm font-bold text-muted-foreground" data-testid={`financial-upcoming-earning-${show.id}`}>
                               Rs {show.memberEarning.toLocaleString()}
                             </span>
-                            <span className="text-[10px] text-muted-foreground">
-                              of Rs {show.totalAmount.toLocaleString()}
-                            </span>
+                            {isMember && (
+                              <span className="text-[10px] text-muted-foreground italic">Estimated</span>
+                            )}
+                            {isAdmin && (
+                              <span className="text-[10px] text-muted-foreground">
+                                of Rs {show.totalAmount.toLocaleString()}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </CardContent>
                     </Card>
-                  </Link>
-                ))}
+                  );
+                  return isAdmin ? (
+                    <Link key={show.id} href={`/shows/${show.id}`}>{cardContent}</Link>
+                  ) : (
+                    <div key={show.id}>{cardContent}</div>
+                  );
+                })}
               </div>
+              {isMember && (
+                <p className="text-xs text-muted-foreground italic mt-2">
+                  *Estimated amounts for upcoming shows. Expenses not accounted yet, actual amount may vary.
+                </p>
+              )}
             </div>
           )}
 
@@ -407,17 +439,19 @@ export default function FinancialsPage() {
                 <CardContent className="pt-8 pb-8 flex flex-col items-center justify-center">
                   <Music className="w-10 h-10 text-muted-foreground mb-3" />
                   <p className="text-sm text-muted-foreground" data-testid="text-no-financial-shows">
-                    {selectedMember === "Haider Jamil"
+                    {isMember
                       ? "No shows performed in the selected period"
-                      : `${selectedMember} has no shows performed in the selected period`}
+                      : selectedMember === "Haider Jamil"
+                        ? "No shows performed in the selected period"
+                        : `${selectedMember} has no shows performed in the selected period`}
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-2">
-                {stats?.shows.map((show) => (
-                  <Link key={show.id} href={`/shows/${show.id}`}>
-                    <Card className="hover-elevate cursor-pointer" data-testid={`financial-show-${show.id}`}>
+                {stats?.shows.map((show) => {
+                  const cardContent = (
+                    <Card className={`${isAdmin ? "hover-elevate cursor-pointer" : ""}`} data-testid={`financial-show-${show.id}`}>
                       <CardContent className="pt-4 pb-4">
                         <div className="flex items-start justify-between gap-3 flex-wrap">
                           <div className="min-w-0 flex-1">
@@ -449,15 +483,22 @@ export default function FinancialsPage() {
                             <span className="text-sm font-bold text-primary" data-testid={`financial-earning-${show.id}`}>
                               Rs {show.memberEarning.toLocaleString()}
                             </span>
-                            <span className="text-[10px] text-muted-foreground">
-                              of Rs {show.totalAmount.toLocaleString()}
-                            </span>
+                            {isAdmin && (
+                              <span className="text-[10px] text-muted-foreground">
+                                of Rs {show.totalAmount.toLocaleString()}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </CardContent>
                     </Card>
-                  </Link>
-                ))}
+                  );
+                  return isAdmin ? (
+                    <Link key={show.id} href={`/shows/${show.id}`}>{cardContent}</Link>
+                  ) : (
+                    <div key={show.id}>{cardContent}</div>
+                  );
+                })}
               </div>
             )}
           </div>

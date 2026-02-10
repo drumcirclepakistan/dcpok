@@ -2,17 +2,27 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import type { User } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 
+interface ExtendedUser extends User {
+  bandMemberId?: string | null;
+  bandMemberName?: string | null;
+  canAddShows?: boolean;
+  canEditName?: boolean;
+}
+
 interface AuthContextType {
-  user: User | null;
+  user: ExtendedUser | null;
   isLoading: boolean;
+  isAdmin: boolean;
+  isMember: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<ExtendedUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
@@ -46,8 +56,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const isAdmin = user?.role === "founder";
+  const isMember = user?.role === "member";
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, isAdmin, isMember, login, logout, refreshUser: checkAuth }}>
       {children}
     </AuthContext.Provider>
   );

@@ -171,6 +171,8 @@ export async function registerRoutes(
   await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS has_min_logic BOOLEAN NOT NULL DEFAULT false`);
   await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS min_threshold INTEGER`);
   await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS min_flat_rate INTEGER`);
+  await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_add_shows BOOLEAN NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_edit_name BOOLEAN NOT NULL DEFAULT false`);
 
   // Show types table
   await db.execute(sql`
@@ -215,6 +217,16 @@ export async function registerRoutes(
       return res.status(401).json({ message: "User not found" });
     }
     const { password: _, ...safeUser } = user;
+    if (user.role === "member") {
+      const bandMember = await storage.getBandMemberByUserId(user.id);
+      return res.json({
+        ...safeUser,
+        bandMemberId: bandMember?.id || null,
+        bandMemberName: bandMember?.name || null,
+        canAddShows: bandMember?.canAddShows || false,
+        canEditName: bandMember?.canEditName || false,
+      });
+    }
     res.json(safeUser);
   });
 
@@ -652,6 +664,342 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to compute financials" });
+    }
+  });
+
+  // Helper: get the band member for a member-role user
+  async function getMemberContext(req: Request) {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user || user.role !== "member") return null;
+    const bandMember = await storage.getBandMemberByUserId(user.id);
+    return bandMember || null;
+  }
+
+  // Helper: get all shows (from all founders/users)
+  async function getAllShowsForMember() {
+    const allUsers = await storage.getAllUsers();
+    const founderUser = allUsers.find(u => u.role === "founder");
+    if (!founderUser) return [];
+    return storage.getShows(founderUser.id);
+  }
+
+  // Member-scoped: get shows they are assigned to
+  app.get("/api/member/shows", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+
+      const allShows = await getAllShowsForMember();
+      const memberShows = [];
+
+      for (const show of allShows) {
+        const members = await storage.getShowMembers(show.id);
+        const found = members.find(m => m.name === member.name);
+        if (found) {
+          const expenses = await storage.getShowExpenses(show.id);
+          const expenseSum = expenses.reduce((s, e) => s + e.amount, 0);
+          const net = show.totalAmount - expenseSum;
+
+          const calcPayout = (
+            m: { paymentType: string; paymentValue: number; isReferrer: boolean; referralRate?: number | null; hasMinLogic?: boolean; minThreshold?: number | null; minFlatRate?: number | null },
+            showTotal: number, netAmount: number, totalExp: number
+          ): number => {
+            if (m.paymentType === "percentage") {
+              if (m.isReferrer && m.referralRate) return Math.round((m.referralRate / 100) * netAmount);
+              if (m.hasMinLogic && m.minThreshold && m.minFlatRate) {
+                if (showTotal < m.minThreshold) {
+                  if (totalExp === 0) return m.minFlatRate;
+                  const deduction = Math.round((m.paymentValue / 100) * totalExp);
+                  return Math.max(0, m.minFlatRate - deduction);
+                }
+              }
+              return Math.round((m.paymentValue / 100) * netAmount);
+            }
+            return m.paymentValue;
+          };
+
+          const myEarning = calcPayout(found, show.totalAmount, net, expenseSum);
+          const isUpcoming = new Date(show.showDate) > new Date();
+
+          memberShows.push({
+            id: show.id,
+            title: show.title,
+            city: show.city,
+            showType: show.showType,
+            showDate: show.showDate.toISOString(),
+            totalAmount: show.totalAmount,
+            myEarning,
+            isPaid: show.isPaid,
+            status: show.status,
+            isUpcoming,
+            organizationName: show.organizationName,
+            publicShowFor: show.publicShowFor,
+          });
+        }
+      }
+
+      res.json(memberShows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch member shows" });
+    }
+  });
+
+  // Member-scoped: dashboard stats
+  app.get("/api/member/dashboard", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+
+      const allShows = await getAllShowsForMember();
+      const { from, to } = req.query as { from?: string; to?: string };
+
+      let filteredShows = allShows;
+      if (from) filteredShows = filteredShows.filter(s => new Date(s.showDate) >= new Date(from));
+      if (to) filteredShows = filteredShows.filter(s => new Date(s.showDate) <= new Date(to));
+
+      const calcPayout = (
+        m: { paymentType: string; paymentValue: number; isReferrer: boolean; referralRate?: number | null; hasMinLogic?: boolean; minThreshold?: number | null; minFlatRate?: number | null },
+        showTotal: number, netAmount: number, totalExp: number
+      ): number => {
+        if (m.paymentType === "percentage") {
+          if (m.isReferrer && m.referralRate) return Math.round((m.referralRate / 100) * netAmount);
+          if (m.hasMinLogic && m.minThreshold && m.minFlatRate) {
+            if (showTotal < m.minThreshold) {
+              if (totalExp === 0) return m.minFlatRate;
+              const deduction = Math.round((m.paymentValue / 100) * totalExp);
+              return Math.max(0, m.minFlatRate - deduction);
+            }
+          }
+          return Math.round((m.paymentValue / 100) * netAmount);
+        }
+        return m.paymentValue;
+      };
+
+      let totalEarnings = 0;
+      let showsPerformed = 0;
+      let upcomingCount = 0;
+      let pendingPayments = 0;
+      const cityCount: Record<string, number> = {};
+      const typeCount: Record<string, number> = {};
+      const upcomingShows: any[] = [];
+      const completedShows: any[] = [];
+
+      for (const show of filteredShows) {
+        const members = await storage.getShowMembers(show.id);
+        const found = members.find(m => m.name === member.name);
+        if (!found) continue;
+
+        const expenses = await storage.getShowExpenses(show.id);
+        const expenseSum = expenses.reduce((s, e) => s + e.amount, 0);
+        const net = show.totalAmount - expenseSum;
+        const myEarning = calcPayout(found, show.totalAmount, net, expenseSum);
+        const isUpcoming = new Date(show.showDate) > new Date();
+
+        const showInfo = {
+          id: show.id,
+          title: show.title,
+          city: show.city,
+          showType: show.showType,
+          showDate: show.showDate.toISOString(),
+          myEarning,
+          isPaid: show.isPaid,
+          status: show.status,
+          totalAmount: show.totalAmount,
+        };
+
+        if (isUpcoming) {
+          upcomingCount++;
+          pendingPayments += myEarning;
+          upcomingShows.push(showInfo);
+        } else {
+          showsPerformed++;
+          if (show.isPaid) {
+            totalEarnings += myEarning;
+          }
+          completedShows.push(showInfo);
+          cityCount[show.city] = (cityCount[show.city] || 0) + 1;
+          typeCount[show.showType] = (typeCount[show.showType] || 0) + 1;
+        }
+      }
+
+      // Upcoming count should always be from all shows, not filtered
+      let totalUpcoming = 0;
+      let totalPending = 0;
+      for (const show of allShows) {
+        if (new Date(show.showDate) <= new Date()) continue;
+        const members = await storage.getShowMembers(show.id);
+        const found = members.find(m => m.name === member.name);
+        if (!found) continue;
+        totalUpcoming++;
+        const expenses = await storage.getShowExpenses(show.id);
+        const expenseSum = expenses.reduce((s, e) => s + e.amount, 0);
+        const net = show.totalAmount - expenseSum;
+        totalPending += calcPayout(found, show.totalAmount, net, expenseSum);
+      }
+
+      const topCities = Object.entries(cityCount).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([city, count]) => ({ city, count }));
+      const topTypes = Object.entries(typeCount).sort((a, b) => b[1] - a[1]).map(([type, count]) => ({ type, count }));
+
+      res.json({
+        totalEarnings,
+        showsPerformed,
+        upcomingCount: totalUpcoming,
+        pendingPayments: totalPending,
+        topCities,
+        topTypes,
+        upcomingShows: upcomingShows.sort((a: any, b: any) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime()),
+        completedShows: completedShows.sort((a: any, b: any) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to compute member dashboard" });
+    }
+  });
+
+  // Member-scoped: financials (same member, no other members visible)
+  app.get("/api/member/financials", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+
+      const allShows = await getAllShowsForMember();
+      const { from, to } = req.query as { from?: string; to?: string };
+
+      let filteredShows = allShows;
+      if (from) filteredShows = filteredShows.filter(s => new Date(s.showDate) >= new Date(from));
+      if (to) filteredShows = filteredShows.filter(s => new Date(s.showDate) <= new Date(to));
+
+      const calcPayout = (
+        m: { paymentType: string; paymentValue: number; isReferrer: boolean; referralRate?: number | null; hasMinLogic?: boolean; minThreshold?: number | null; minFlatRate?: number | null },
+        showTotal: number, netAmount: number, totalExp: number
+      ): number => {
+        if (m.paymentType === "percentage") {
+          if (m.isReferrer && m.referralRate) return Math.round((m.referralRate / 100) * netAmount);
+          if (m.hasMinLogic && m.minThreshold && m.minFlatRate) {
+            if (showTotal < m.minThreshold) {
+              if (totalExp === 0) return m.minFlatRate;
+              const deduction = Math.round((m.paymentValue / 100) * totalExp);
+              return Math.max(0, m.minFlatRate - deduction);
+            }
+          }
+          return Math.round((m.paymentValue / 100) * netAmount);
+        }
+        return m.paymentValue;
+      };
+
+      const pastShows: any[] = [];
+      const upcomingShows: any[] = [];
+      let totalEarnings = 0;
+      let totalShowsPerformed = 0;
+      const citySet: Record<string, number> = {};
+
+      for (const show of filteredShows) {
+        const members = await storage.getShowMembers(show.id);
+        const found = members.find(m => m.name === member.name);
+        if (!found) continue;
+
+        const expenses = await storage.getShowExpenses(show.id);
+        const expenseSum = expenses.reduce((s, e) => s + e.amount, 0);
+        const net = show.totalAmount - expenseSum;
+        const myEarning = calcPayout(found, show.totalAmount, net, expenseSum);
+        const isUpcoming = new Date(show.showDate) > new Date();
+
+        const detail = {
+          id: show.id,
+          title: show.title,
+          city: show.city,
+          showDate: show.showDate.toISOString(),
+          showType: show.showType,
+          totalAmount: show.totalAmount,
+          memberEarning: myEarning,
+          isPaid: show.isPaid,
+        };
+
+        if (isUpcoming) {
+          upcomingShows.push(detail);
+        } else {
+          pastShows.push(detail);
+          totalShowsPerformed++;
+          if (show.isPaid) totalEarnings += myEarning;
+          citySet[show.city] = (citySet[show.city] || 0) + 1;
+        }
+      }
+
+      const cities = Object.entries(citySet).sort((a, b) => b[1] - a[1]).map(([city, count]) => ({ city, count }));
+      const avgPerShow = totalShowsPerformed > 0 ? Math.round(totalEarnings / totalShowsPerformed) : 0;
+      const paidShows = pastShows.filter(s => s.isPaid).length;
+      const unpaidPastShows = pastShows.filter(s => !s.isPaid);
+      const unpaidShows = unpaidPastShows.length;
+      const unpaidAmount = unpaidPastShows.reduce((s: number, sh: any) => s + sh.memberEarning, 0);
+      const pendingAmount = upcomingShows.reduce((s: number, sh: any) => s + sh.memberEarning, 0);
+
+      res.json({
+        member: member.name,
+        totalEarnings,
+        totalShows: totalShowsPerformed,
+        avgPerShow,
+        paidShows,
+        unpaidShows,
+        unpaidAmount,
+        pendingAmount,
+        upcomingShowsCount: upcomingShows.length,
+        cities,
+        shows: pastShows.sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()),
+        upcomingShows: upcomingShows.sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime()),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to compute member financials" });
+    }
+  });
+
+  // Member: update own name
+  app.patch("/api/member/name", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+      if (!member.canEditName) return res.status(403).json({ message: "You don't have permission to change your name" });
+
+      const { name } = req.body;
+      if (!name || !name.trim()) return res.status(400).json({ message: "Name is required" });
+
+      const newName = name.trim();
+      const oldName = member.name;
+
+      await storage.updateBandMember(member.id, { name: newName });
+      await storage.updateUser(req.session.userId!, { displayName: newName });
+
+      const allShows = await getAllShowsForMember();
+      for (const show of allShows) {
+        const members = await storage.getShowMembers(show.id);
+        const found = members.find(m => m.name === oldName);
+        if (found) {
+          await storage.updateMember(found.id, { name: newName });
+        }
+      }
+
+      res.json({ message: "Name updated", name: newName });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Failed to update name" });
+    }
+  });
+
+  // Member: add show (if permitted)
+  app.post("/api/member/shows", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+      if (!member.canAddShows) return res.status(403).json({ message: "You don't have permission to add shows" });
+
+      const allUsers = await storage.getAllUsers();
+      const founderUser = allUsers.find(u => u.role === "founder");
+      if (!founderUser) return res.status(500).json({ message: "No founder found" });
+
+      const parsed = insertShowSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid show data", errors: parsed.error.flatten() });
+
+      const show = await storage.createShow({ ...parsed.data, userId: founderUser.id });
+      res.json(show);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Failed to create show" });
     }
   });
 

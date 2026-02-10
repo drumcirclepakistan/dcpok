@@ -53,6 +53,7 @@ export interface IStorage {
 
   getBandMembers(): Promise<BandMember[]>;
   getBandMember(id: string): Promise<BandMember | undefined>;
+  getBandMemberByUserId(userId: string): Promise<BandMember | undefined>;
   createBandMember(member: InsertBandMember): Promise<BandMember>;
   updateBandMember(id: string, data: Partial<InsertBandMember>): Promise<BandMember | undefined>;
   deleteBandMember(id: string): Promise<boolean>;
@@ -190,6 +191,11 @@ export class DatabaseStorage implements IStorage {
 
   async getBandMember(id: string): Promise<BandMember | undefined> {
     const [member] = await db.select().from(bandMembers).where(eq(bandMembers.id, id));
+    return member;
+  }
+
+  async getBandMemberByUserId(userId: string): Promise<BandMember | undefined> {
+    const [member] = await db.select().from(bandMembers).where(eq(bandMembers.userId, userId));
     return member;
   }
 

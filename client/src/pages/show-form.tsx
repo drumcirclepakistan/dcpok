@@ -5,6 +5,7 @@ import { useLocation, useParams } from "wouter";
 import { insertShowSchema, type InsertShow, type Show } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,6 +55,7 @@ export default function ShowForm() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isMember } = useAuth();
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [conflictShows, setConflictShows] = useState<ConflictShow[]>([]);
   const [pendingData, setPendingData] = useState<InsertShow | null>(null);
@@ -111,10 +113,12 @@ export default function ShowForm() {
       if (isEditing) {
         return apiRequest("PATCH", `/api/shows/${id}`, data);
       }
-      return apiRequest("POST", "/api/shows", data);
+      const endpoint = isMember ? "/api/member/shows" : "/api/shows";
+      return apiRequest("POST", endpoint, data);
     },
     onSuccess: async (res) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shows"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/member/shows"] });
       toast({
         title: isEditing ? "Show updated" : "Show added",
         description: isEditing
@@ -123,7 +127,11 @@ export default function ShowForm() {
       });
       if (!isEditing) {
         const show = await res.json();
-        navigate(`/shows/${show.id}`);
+        if (isMember) {
+          navigate("/shows");
+        } else {
+          navigate(`/shows/${show.id}`);
+        }
       } else {
         navigate(`/shows/${id}`);
       }

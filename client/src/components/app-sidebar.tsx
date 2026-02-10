@@ -15,18 +15,32 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { LayoutDashboard, CalendarPlus, ListMusic, LogOut, Drum, Settings, Wallet } from "lucide-react";
-
-const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Shows", url: "/shows", icon: ListMusic },
-  { title: "Add Show", url: "/shows/new", icon: CalendarPlus },
-  { title: "Financials", url: "/financials", icon: Wallet },
-  { title: "Settings", url: "/settings", icon: Settings },
-];
+import { useMemo } from "react";
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin, isMember } = useAuth();
+
+  const navItems = useMemo(() => {
+    if (isMember) {
+      const items = [
+        { title: "Dashboard", url: "/", icon: LayoutDashboard },
+        { title: "Shows", url: "/shows", icon: ListMusic },
+      ];
+      if (user?.canAddShows) {
+        items.push({ title: "Add Show", url: "/shows/new", icon: CalendarPlus });
+      }
+      items.push({ title: "Financials", url: "/financials", icon: Wallet });
+      return items;
+    }
+    return [
+      { title: "Dashboard", url: "/", icon: LayoutDashboard },
+      { title: "Shows", url: "/shows", icon: ListMusic },
+      { title: "Add Show", url: "/shows/new", icon: CalendarPlus },
+      { title: "Financials", url: "/financials", icon: Wallet },
+      { title: "Settings", url: "/settings", icon: Settings },
+    ];
+  }, [isAdmin, isMember, user?.canAddShows]);
 
   return (
     <Sidebar>
@@ -78,15 +92,15 @@ export function AppSidebar() {
         <div className="flex items-center gap-3">
           <Avatar className="w-8 h-8">
             <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-              {user?.displayName?.charAt(0)?.toUpperCase() || "F"}
+              {user?.displayName?.charAt(0)?.toUpperCase() || "U"}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate" data-testid="text-user-name">
-              {user?.displayName || "Haider Jamil"}
+              {user?.displayName || "User"}
             </p>
             <p className="text-xs text-muted-foreground truncate capitalize">
-              {user?.role === "founder" ? "Admin" : (user?.role || "Admin")}
+              {user?.role === "founder" ? "Admin" : "Member"}
             </p>
           </div>
           <Button

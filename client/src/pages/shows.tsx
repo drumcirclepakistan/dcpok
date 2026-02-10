@@ -10,6 +10,22 @@ import { format } from "date-fns";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
 import type { Show } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
+
+interface MemberShow {
+  id: string;
+  title: string;
+  city: string;
+  showType: string;
+  showDate: string;
+  totalAmount: number;
+  myEarning: number;
+  isPaid: boolean;
+  status: string;
+  isUpcoming: boolean;
+  organizationName?: string | null;
+  publicShowFor?: string | null;
+}
 
 const statusColors: Record<string, string> = {
   upcoming: "default",
@@ -20,35 +36,62 @@ const statusColors: Record<string, string> = {
 const showTypeBadgeVariant = (_type: string) => "secondary";
 
 export default function ShowsPage() {
+  const { isAdmin, isMember, user } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [paidFilter, setPaidFilter] = useState("all");
 
-  const { data: shows, isLoading } = useQuery<Show[]>({
+  const { data: shows, isLoading: adminLoading } = useQuery<Show[]>({
     queryKey: ["/api/shows"],
+    enabled: isAdmin,
   });
+
+  const { data: memberShows, isLoading: memberLoading } = useQuery<MemberShow[]>({
+    queryKey: ["/api/member/shows"],
+    enabled: isMember,
+  });
+
+  const isLoading = isAdmin ? adminLoading : memberLoading;
 
   const { data: showTypes = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["/api/show-types"],
   });
 
+  const normalizedShows = useMemo(() => {
+    if (isMember && memberShows) {
+      return memberShows.map((s) => ({
+        ...s,
+        advancePayment: 0,
+        status: s.isUpcoming ? "upcoming" : (s.status || "completed"),
+      }));
+    }
+    if (isAdmin && shows) {
+      return shows.map((s) => ({
+        ...s,
+        showDate: typeof s.showDate === 'string' ? s.showDate : new Date(s.showDate).toISOString(),
+        myEarning: 0,
+        isUpcoming: new Date(s.showDate) > new Date(),
+      }));
+    }
+    return [];
+  }, [shows, memberShows, isAdmin, isMember]);
+
   const filtered = useMemo(() => {
-    if (!shows) return [];
-    return shows
+    return normalizedShows
       .filter((s) => {
         const matchesSearch =
           !search ||
           s.title.toLowerCase().includes(search.toLowerCase()) ||
           s.city.toLowerCase().includes(search.toLowerCase()) ||
-          s.organizationName?.toLowerCase().includes(search.toLowerCase()) ||
-          s.publicShowFor?.toLowerCase().includes(search.toLowerCase());
+          (s.organizationName?.toLowerCase().includes(search.toLowerCase())) ||
+          (s.publicShowFor?.toLowerCase().includes(search.toLowerCase()));
         const matchesStatus = statusFilter === "all" || s.status === statusFilter;
         const matchesType = typeFilter === "all" || s.showType === typeFilter;
         const matchesPaid = paidFilter === "all" || (paidFilter === "paid" ? s.isPaid : !s.isPaid);
         return matchesSearch && matchesStatus && matchesType && matchesPaid;
       });
-  }, [shows, search, statusFilter, typeFilter, paidFilter]);
+  }, [normalizedShows, search, statusFilter, typeFilter, paidFilter]);
 
   const unpaidCompleted = useMemo(() => {
     return filtered
@@ -60,13 +103,14 @@ export default function ShowsPage() {
   }, [filtered]);
 
   const noAdvancePaid = useMemo(() => {
+    if (isMember) return [];
     return filtered
-      .filter((s) => {
+      .filter((s: any) => {
         const isUpcoming = s.status === "upcoming" && new Date(s.showDate) > new Date();
         return isUpcoming && s.advancePayment === 0;
       })
       .sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime());
-  }, [filtered]);
+  }, [filtered, isMember]);
 
   const otherShows = useMemo(() => {
     const unpaidCompletedIds = new Set(unpaidCompleted.map((s) => s.id));
@@ -83,14 +127,17 @@ export default function ShowsPage() {
         if (bUpcoming) return 1;
         return new Date(b.showDate).getTime() - new Date(a.showDate).getTime();
       });
-  }, [filtered, unpaidCompleted]);
+  }, [filtered, unpaidCompleted, noAdvancePaid]);
 
-  const renderShowCard = (show: Show, isAlert: boolean) => {
+  const renderShowCard = (show: any, isAlert: boolean) => {
     const isOverdue = !show.isPaid && (show.status === "completed" || new Date(show.showDate) < new Date());
+    const showLink = isAdmin ? `/shows/${show.id}` : undefined;
+    const CardWrapper = ({ children }: { children: React.ReactNode }) =>
+      showLink ? <Link href={showLink}>{children}</Link> : <>{children}</>;
     return (
-      <Link key={show.id} href={`/shows/${show.id}`}>
+      <CardWrapper key={show.id}>
         <Card
-          className={`hover-elevate cursor-pointer ${isAlert ? "border-destructive/40" : ""}`}
+          className={`${showLink ? "hover-elevate cursor-pointer" : ""} ${isAlert ? "border-destructive/40" : ""}`}
           data-testid={`card-show-${show.id}`}
         >
           <CardContent className="pt-4 pb-4">
@@ -113,7 +160,7 @@ export default function ShowsPage() {
                       <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
                       Unpaid
                     </Badge>
-                  ) : show.status === "upcoming" && show.advancePayment === 0 ? (
+                  ) : isAdmin && show.status === "upcoming" && show.advancePayment === 0 ? (
                     <Badge variant="outline" className="text-[10px] text-muted-foreground">
                       <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
                       Advance not paid
@@ -136,19 +183,32 @@ export default function ShowsPage() {
                 <Badge variant={showTypeBadgeVariant(show.showType) as any}>
                   {show.showType}
                 </Badge>
-                <span className="text-sm font-semibold" data-testid={`text-show-amount-${show.id}`}>
-                  Rs {show.totalAmount.toLocaleString()}
-                </span>
-                {show.advancePayment > 0 && (
-                  <span className="text-[10px] text-muted-foreground">
-                    Advance: Rs {show.advancePayment.toLocaleString()}
-                  </span>
+                {isMember ? (
+                  <>
+                    <span className="text-sm font-semibold" data-testid={`text-show-earning-${show.id}`}>
+                      Rs {show.myEarning?.toLocaleString() || "0"}
+                    </span>
+                    {show.isUpcoming && (
+                      <span className="text-[10px] text-muted-foreground italic">Estimated</span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm font-semibold" data-testid={`text-show-amount-${show.id}`}>
+                      Rs {show.totalAmount.toLocaleString()}
+                    </span>
+                    {show.advancePayment > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        Advance: Rs {show.advancePayment.toLocaleString()}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
           </CardContent>
         </Card>
-      </Link>
+      </CardWrapper>
     );
   };
 
@@ -156,17 +216,21 @@ export default function ShowsPage() {
     <div className="p-4 md:p-6 space-y-5 max-w-5xl mx-auto">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold" data-testid="text-shows-heading">Shows</h1>
+          <h1 className="text-xl font-bold" data-testid="text-shows-heading">
+            {isMember ? "My Shows" : "Shows"}
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Manage all your performances
+            {isMember ? "Shows you're assigned to" : "Manage all your performances"}
           </p>
         </div>
-        <Link href="/shows/new">
-          <Button data-testid="button-add-show">
-            <CalendarPlus className="w-4 h-4 mr-2" />
-            Add Show
-          </Button>
-        </Link>
+        {(isAdmin || user?.canAddShows) && (
+          <Link href="/shows/new">
+            <Button data-testid="button-add-show">
+              <CalendarPlus className="w-4 h-4 mr-2" />
+              Add Show
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -236,14 +300,16 @@ export default function ShowsPage() {
           <CardContent className="pt-10 pb-10 flex flex-col items-center justify-center">
             <ListMusic className="w-12 h-12 text-muted-foreground mb-3" />
             <p className="text-sm font-medium text-foreground" data-testid="text-no-shows">
-              {shows?.length === 0 ? "No shows yet" : "No shows match your filters"}
+              {normalizedShows.length === 0
+                ? (isMember ? "No shows assigned to you yet" : "No shows yet")
+                : "No shows match your filters"}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              {shows?.length === 0
-                ? "Add your first show to get started"
+              {normalizedShows.length === 0
+                ? (isMember ? "You'll see shows here once you're assigned to them" : "Add your first show to get started")
                 : "Try adjusting your search or filters"}
             </p>
-            {shows?.length === 0 && (
+            {normalizedShows.length === 0 && isAdmin && (
               <Link href="/shows/new">
                 <Button className="mt-4" data-testid="button-add-first-show">
                   <CalendarPlus className="w-4 h-4 mr-2" />
@@ -286,6 +352,12 @@ export default function ShowsPage() {
               )}
               {otherShows.map((show) => renderShowCard(show, false))}
             </div>
+          )}
+
+          {isMember && (
+            <p className="text-xs text-muted-foreground italic mt-2" data-testid="text-member-estimate-note">
+              *Amounts shown for upcoming shows are estimated. Expenses not accounted yet, actual amount may vary.
+            </p>
           )}
         </div>
       )}
