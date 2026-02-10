@@ -19,18 +19,32 @@ import FinancialsPage from "@/pages/financials";
 import DirectoryPage from "@/pages/directory";
 import PolicyPage from "@/pages/policy";
 
+import { Redirect } from "wouter";
+
+function AdminOnly({ component: Component }: { component: React.ComponentType }) {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <Redirect to="/" />;
+  return <Component />;
+}
+
+function MemberOnly({ component: Component }: { component: React.ComponentType }) {
+  const { isMember } = useAuth();
+  if (!isMember) return <Redirect to="/" />;
+  return <Component />;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/shows" component={ShowsPage} />
       <Route path="/shows/new" component={ShowForm} />
-      <Route path="/shows/:id/edit" component={ShowForm} />
-      <Route path="/shows/:id" component={ShowDetail} />
-      <Route path="/directory" component={DirectoryPage} />
+      <Route path="/shows/:id/edit">{() => <AdminOnly component={ShowForm} />}</Route>
+      <Route path="/shows/:id">{() => <AdminOnly component={ShowDetail} />}</Route>
+      <Route path="/directory">{() => <AdminOnly component={DirectoryPage} />}</Route>
       <Route path="/financials" component={FinancialsPage} />
-      <Route path="/policy" component={PolicyPage} />
-      <Route path="/settings" component={SettingsPage} />
+      <Route path="/policy">{() => <MemberOnly component={PolicyPage} />}</Route>
+      <Route path="/settings">{() => <AdminOnly component={SettingsPage} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

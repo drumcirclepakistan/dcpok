@@ -115,7 +115,7 @@ export default function LoginPage() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Admin Access Only
+          Drum Circle Pakistan
         </p>
       </div>
     </div>

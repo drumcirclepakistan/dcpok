@@ -37,7 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Loader2, Save, User, Phone, Mail, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Loader2, Save, User, Phone, Mail, AlertTriangle, Drum, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { useEffect, useState, useCallback } from "react";
 
@@ -85,6 +85,8 @@ export default function ShowForm() {
       pocName: "",
       pocPhone: "",
       pocEmail: "",
+      numberOfDrums: null,
+      location: "",
     },
   });
 
@@ -104,6 +106,8 @@ export default function ShowForm() {
         pocName: existingShow.pocName || "",
         pocPhone: existingShow.pocPhone || "",
         pocEmail: existingShow.pocEmail || "",
+        numberOfDrums: existingShow.numberOfDrums ?? null,
+        location: existingShow.location || "",
       });
     }
   }, [existingShow, form]);
@@ -350,6 +354,52 @@ export default function ShowForm() {
                   );
                 }}
               />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="numberOfDrums"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Drum className="w-3.5 h-3.5 text-muted-foreground" />
+                        Number of Drums (Optional)
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          data-testid="input-number-of-drums"
+                          placeholder="e.g. 4"
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                        Location (Optional)
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value || ""}
+                          data-testid="input-location"
+                          placeholder="e.g. Pearl Continental, Bahria Town"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField

@@ -21,6 +21,8 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - **Dynamic show types**: Managed via Settings (add/edit/remove), stored in show_types table with configurable field flags (showOrgField, showPublicField) per type
 - Organization tracking for Corporate/University shows
 - "Public Show For" field for Public shows (e.g. cafe, restaurant name)
+- **Number of Drums**: Optional field per show to specify how many drums are required
+- **Location**: Optional field per show for venue/location details (e.g. Pearl Continental, Bahria Town)
 - Financial tracking: total amount, advance payment, pending amount
 - Paid/Unpaid tracking per show with toggle button on show detail page
 - Shows list highlights completed-but-unpaid shows in red "Action Required" section
@@ -55,7 +57,7 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - **Permissions** (controlled by admin in Settings > Band Members):
   - `canAddShows`: Allows member to create new shows via the show form; member is auto-added to band section as referrer
   - `canEditName`: Allows member to update their display name via pencil icon in sidebar (propagates to show_members records)
-- **Route Protection**: All admin routes use `requireAdmin` middleware; members cannot access show details, settings, expenses, or other admin-only features
+- **Route Protection**: Backend uses `requireAdmin` middleware on admin routes; frontend uses `AdminOnly`/`MemberOnly` wrapper components in App.tsx to redirect unauthorized users to dashboard; members cannot access show details, settings, directory, expenses, or other admin-only pages
 - **Referred by you**: Shows tagged with "Referred by you" badge on shows page, dashboard upcoming/completed shows, and financials show lists
 - **Shows Referred stat**: Count of referred shows displayed on dashboard and financials (visible when > 0)
 - **Payout Policy page**: Member-only page showing payment structure (type, rates, referral rate, minimum logic) with descriptive explanations

@@ -31,7 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, MapPin, Calendar, Building2, Pencil, Trash2,
   StickyNote, User, Phone, Mail, Plus, X, Users, Receipt, Calculator,
-  Loader2, CheckCircle, AlertCircle,
+  Loader2, CheckCircle, AlertCircle, Drum,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useMemo } from "react";
@@ -487,6 +487,26 @@ export default function ShowDetail() {
                   <div>
                     <p className="text-xs text-muted-foreground">Public Show For</p>
                     <p className="text-sm font-medium" data-testid="text-detail-public-show-for">{show.publicShowFor}</p>
+                  </div>
+                </div>
+              )}
+
+              {show.numberOfDrums && (
+                <div className="flex items-start gap-3">
+                  <Drum className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Number of Drums</p>
+                    <p className="text-sm font-medium" data-testid="text-detail-drums">{show.numberOfDrums}</p>
+                  </div>
+                </div>
+              )}
+
+              {show.location && (
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Location</p>
+                    <p className="text-sm font-medium" data-testid="text-detail-location">{show.location}</p>
                   </div>
                 </div>
               )}

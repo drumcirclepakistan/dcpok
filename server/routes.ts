@@ -741,6 +741,8 @@ export async function registerRoutes(
             isUpcoming,
             organizationName: show.organizationName,
             publicShowFor: show.publicShowFor,
+            numberOfDrums: show.numberOfDrums,
+            location: show.location,
             isReferrer: found.isReferrer,
           });
         }

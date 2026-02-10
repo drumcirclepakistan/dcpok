@@ -25,6 +25,8 @@ interface MemberShow {
   isUpcoming: boolean;
   organizationName?: string | null;
   publicShowFor?: string | null;
+  numberOfDrums?: number | null;
+  location?: string | null;
   isReferrer?: boolean;
 }
 
@@ -182,10 +184,24 @@ export default function ShowsPage() {
                     {format(new Date(show.showDate), "MMM d, yyyy 'at' h:mm a")}
                   </span>
                 </div>
-                {(show.organizationName || show.publicShowFor) && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {show.organizationName || show.publicShowFor}
-                  </p>
+                {(show.organizationName || show.publicShowFor || show.location || show.numberOfDrums) && (
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {(show.organizationName || show.publicShowFor) && (
+                      <span className="text-xs text-muted-foreground">
+                        {show.organizationName || show.publicShowFor}
+                      </span>
+                    )}
+                    {show.location && (
+                      <span className="text-xs text-muted-foreground">
+                        {show.location}
+                      </span>
+                    )}
+                    {show.numberOfDrums && (
+                      <span className="text-xs text-muted-foreground">
+                        {show.numberOfDrums} drums
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
