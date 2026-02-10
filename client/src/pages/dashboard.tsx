@@ -270,13 +270,15 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                <StatCard
-                  label="Total Earnings"
-                  value={`Rs ${(memberStats?.totalEarnings || 0).toLocaleString()}`}
-                  icon={Crown}
-                  testId="stat-total-earnings"
-                  variant="highlight"
-                />
+                {user?.canViewAmounts !== false && (
+                  <StatCard
+                    label="Total Earnings"
+                    value={`Rs ${(memberStats?.totalEarnings || 0).toLocaleString()}`}
+                    icon={Crown}
+                    testId="stat-total-earnings"
+                    variant="highlight"
+                  />
+                )}
                 <StatCard
                   label="Shows Performed"
                   value={memberStats?.showsPerformed || 0}
@@ -289,12 +291,14 @@ export default function Dashboard() {
                   icon={CalendarDays}
                   testId="stat-upcoming"
                 />
-                <StatCard
-                  label="Pending Payments"
-                  value={`Rs ${(memberStats?.pendingPayments || 0).toLocaleString()}`}
-                  icon={Wallet}
-                  testId="stat-pending-payments"
-                />
+                {user?.canViewAmounts !== false && (
+                  <StatCard
+                    label="Pending Payments"
+                    value={`Rs ${(memberStats?.pendingPayments || 0).toLocaleString()}`}
+                    icon={Wallet}
+                    testId="stat-pending-payments"
+                  />
+                )}
                 {(memberStats?.referredCount || 0) > 0 && (
                   <StatCard
                     label="Shows Referred"
@@ -425,9 +429,11 @@ export default function Dashboard() {
                           <Badge variant={showTypeBadgeVariant(show.showType) as any}>
                             {show.showType}
                           </Badge>
-                          <span className="text-sm font-semibold" data-testid={`text-upcoming-show-amount-${show.id}`}>
-                            Rs {show.totalAmount.toLocaleString()}
-                          </span>
+                          {user?.canViewAmounts && show.totalAmount != null && (
+                            <span className="text-sm font-semibold" data-testid={`text-upcoming-show-amount-${show.id}`}>
+                              Rs {show.totalAmount.toLocaleString()}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -495,9 +501,11 @@ export default function Dashboard() {
                           <Badge variant={showTypeBadgeVariant(show.showType) as any}>
                             {show.showType}
                           </Badge>
-                          <span className="text-sm font-semibold" data-testid={`text-completed-show-amount-${show.id}`}>
-                            Rs {show.totalAmount.toLocaleString()}
-                          </span>
+                          {user?.canViewAmounts && show.totalAmount != null && (
+                            <span className="text-sm font-semibold" data-testid={`text-completed-show-amount-${show.id}`}>
+                              Rs {show.totalAmount.toLocaleString()}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </CardContent>

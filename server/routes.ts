@@ -734,7 +734,7 @@ export async function registerRoutes(
             city: show.city,
             showType: show.showType,
             showDate: show.showDate.toISOString(),
-            totalAmount: show.totalAmount,
+            totalAmount: member.canViewAmounts ? show.totalAmount : undefined,
             myEarning,
             isPaid: show.isPaid,
             status: show.status,
@@ -815,7 +815,7 @@ export async function registerRoutes(
           myEarning,
           isPaid: show.isPaid,
           status: show.status,
-          totalAmount: show.totalAmount,
+          totalAmount: member.canViewAmounts ? show.totalAmount : undefined,
           isReferrer: found.isReferrer,
         };
 
@@ -925,7 +925,7 @@ export async function registerRoutes(
           city: show.city,
           showDate: show.showDate.toISOString(),
           showType: show.showType,
-          totalAmount: show.totalAmount,
+          totalAmount: member.canViewAmounts ? show.totalAmount : undefined,
           memberEarning: myEarning,
           isPaid: show.isPaid,
           isReferrer: found.isReferrer,

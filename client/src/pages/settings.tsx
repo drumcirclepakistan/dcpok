@@ -72,6 +72,7 @@ interface BandMember {
   minFlatRate: number | null;
   canAddShows: boolean;
   canEditName: boolean;
+  canViewAmounts: boolean;
 }
 
 interface ShowType {
@@ -276,7 +277,7 @@ export default function SettingsPage() {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string; role?: string; customRole?: string | null; canAddShows?: boolean; canEditName?: boolean }) =>
+    mutationFn: ({ id, ...data }: { id: string; role?: string; customRole?: string | null; canAddShows?: boolean; canEditName?: boolean; canViewAmounts?: boolean }) =>
       apiRequest("PATCH", `/api/band-members/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/band-members"] });
@@ -747,6 +748,19 @@ export default function SettingsPage() {
                         data-testid={`switch-can-edit-name-${member.id}`}
                       />
                       <span className="text-xs">Can Edit Name</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <Switch
+                        checked={member.canViewAmounts}
+                        onCheckedChange={(checked) => {
+                          updateRoleMutation.mutate({
+                            id: member.id,
+                            canViewAmounts: checked,
+                          });
+                        }}
+                        data-testid={`switch-can-view-amounts-${member.id}`}
+                      />
+                      <span className="text-xs">Can View Amounts</span>
                     </label>
                   </div>
                 </>

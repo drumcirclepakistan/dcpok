@@ -200,6 +200,11 @@ export default function ShowsPage() {
                     {show.isUpcoming && (
                       <span className="text-[10px] text-muted-foreground italic">Estimated</span>
                     )}
+                    {user?.canViewAmounts && show.totalAmount != null && (
+                      <span className="text-[10px] text-muted-foreground">
+                        Show total: Rs {show.totalAmount.toLocaleString()}
+                      </span>
+                    )}
                   </>
                 ) : (
                   <>
