@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import {
   Form,
   FormControl,
@@ -25,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Save, User, Phone, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { useEffect } from "react";
 
@@ -53,6 +54,9 @@ export default function ShowForm() {
       showDate: new Date(),
       status: "upcoming",
       notes: "",
+      pocName: "",
+      pocPhone: "",
+      pocEmail: "",
     },
   });
 
@@ -68,6 +72,9 @@ export default function ShowForm() {
         showDate: new Date(existingShow.showDate),
         status: existingShow.status,
         notes: existingShow.notes || "",
+        pocName: existingShow.pocName || "",
+        pocPhone: existingShow.pocPhone || "",
+        pocEmail: existingShow.pocEmail || "",
       });
     }
   }, [existingShow, form]);
@@ -79,7 +86,7 @@ export default function ShowForm() {
       }
       return apiRequest("POST", "/api/shows", data);
     },
-    onSuccess: () => {
+    onSuccess: async (res) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shows"] });
       toast({
         title: isEditing ? "Show updated" : "Show added",
@@ -87,14 +94,15 @@ export default function ShowForm() {
           ? "The show has been updated successfully"
           : "New show has been added to your schedule",
       });
-      navigate("/shows");
+      if (!isEditing) {
+        const show = await res.json();
+        navigate(`/shows/${show.id}`);
+      } else {
+        navigate(`/shows/${id}`);
+      }
     },
     onError: (err: Error) => {
-      toast({
-        title: "Error",
-        description: err.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
 
@@ -129,7 +137,7 @@ export default function ShowForm() {
         <Button
           size="icon"
           variant="ghost"
-          onClick={() => navigate("/shows")}
+          onClick={() => navigate(isEditing ? `/shows/${id}` : "/shows")}
           data-testid="button-back"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -147,7 +155,7 @@ export default function ShowForm() {
       <Card>
         <CardContent className="pt-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <FormField
                 control={form.control}
                 name="title"
@@ -155,11 +163,7 @@ export default function ShowForm() {
                   <FormItem>
                     <FormLabel>Show Title</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        data-testid="input-title"
-                        placeholder="e.g. Annual Drum Night"
-                      />
+                      <Input {...field} data-testid="input-title" placeholder="e.g. Annual Drum Night" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -174,27 +178,19 @@ export default function ShowForm() {
                     <FormItem>
                       <FormLabel>City</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          data-testid="input-city"
-                          placeholder="e.g. Karachi"
-                        />
+                        <Input {...field} data-testid="input-city" placeholder="e.g. Karachi" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="showType"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Show Type</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-show-type">
                             <SelectValue placeholder="Select type" />
@@ -202,9 +198,7 @@ export default function ShowForm() {
                         </FormControl>
                         <SelectContent>
                           {showTypes.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -220,19 +214,13 @@ export default function ShowForm() {
                   name="organizationName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        {showType === "University" ? "University Name" : "Company Name"}
-                      </FormLabel>
+                      <FormLabel>{showType === "University" ? "University Name" : "Company Name"}</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
                           value={field.value || ""}
                           data-testid="input-organization"
-                          placeholder={
-                            showType === "University"
-                              ? "e.g. LUMS, IBA Karachi"
-                              : "e.g. Unilever, Jazz"
-                          }
+                          placeholder={showType === "University" ? "e.g. LUMS, IBA Karachi" : "e.g. Unilever, Jazz"}
                         />
                       </FormControl>
                       <FormMessage />
@@ -261,10 +249,7 @@ export default function ShowForm() {
                           data-testid="input-show-date"
                           value={dateStr}
                           onChange={(e) => {
-                            const val = e.target.value;
-                            if (val) {
-                              field.onChange(new Date(val));
-                            }
+                            if (e.target.value) field.onChange(new Date(e.target.value));
                           }}
                         />
                       </FormControl>
@@ -294,7 +279,6 @@ export default function ShowForm() {
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="advancePayment"
@@ -323,10 +307,7 @@ export default function ShowForm() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Status</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value || "upcoming"}
-                      >
+                      <Select onValueChange={field.onChange} value={field.value || "upcoming"}>
                         <FormControl>
                           <SelectTrigger data-testid="select-status">
                             <SelectValue />
@@ -343,6 +324,55 @@ export default function ShowForm() {
                   )}
                 />
               )}
+
+              <Separator />
+
+              <div>
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  Contact Person (Optional)
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="pocName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} value={field.value || ""} data-testid="input-poc-name" placeholder="Contact name" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="pocPhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Phone</FormLabel>
+                        <FormControl>
+                          <Input {...field} value={field.value || ""} data-testid="input-poc-phone" placeholder="03XX-XXXXXXX" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="pocEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Email</FormLabel>
+                        <FormControl>
+                          <Input {...field} value={field.value || ""} data-testid="input-poc-email" placeholder="email@example.com" type="email" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              <Separator />
 
               <FormField
                 control={form.control}
@@ -366,11 +396,7 @@ export default function ShowForm() {
               />
 
               <div className="flex items-center gap-3 pt-2 flex-wrap">
-                <Button
-                  type="submit"
-                  disabled={mutation.isPending}
-                  data-testid="button-save-show"
-                >
+                <Button type="submit" disabled={mutation.isPending} data-testid="button-save-show">
                   {mutation.isPending ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -386,7 +412,7 @@ export default function ShowForm() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => navigate("/shows")}
+                  onClick={() => navigate(isEditing ? `/shows/${id}` : "/shows")}
                   data-testid="button-cancel"
                 >
                   Cancel

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, pgEnum, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -34,6 +34,9 @@ export const shows = pgTable("shows", {
   showDate: timestamp("show_date").notNull(),
   status: showStatusEnum("status").notNull().default("upcoming"),
   notes: text("notes"),
+  pocName: text("poc_name"),
+  pocPhone: text("poc_phone"),
+  pocEmail: text("poc_email"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   userId: varchar("user_id").notNull(),
 });
@@ -48,6 +51,9 @@ export const insertShowSchema = createInsertSchema(shows).omit({
   totalAmount: z.coerce.number().min(0, "Amount must be positive"),
   advancePayment: z.coerce.number().min(0, "Advance must be positive"),
   showDate: z.coerce.date(),
+  pocName: z.string().optional().nullable(),
+  pocPhone: z.string().optional().nullable(),
+  pocEmail: z.string().optional().nullable(),
 });
 
 export type InsertShow = z.infer<typeof insertShowSchema>;
@@ -55,3 +61,67 @@ export type Show = typeof shows.$inferSelect;
 
 export const showTypes = ["Corporate", "Private", "Public", "University"] as const;
 export type ShowType = typeof showTypes[number];
+
+export const memberRoleEnum = pgEnum("member_role", ["session_player", "manager", "other"]);
+export const paymentTypeEnum = pgEnum("payment_type", ["percentage", "fixed", "manual"]);
+
+export const showExpenses = pgTable("show_expenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  showId: varchar("show_id").notNull(),
+  description: text("description").notNull(),
+  amount: integer("amount").notNull(),
+});
+
+export const insertExpenseSchema = createInsertSchema(showExpenses).omit({
+  id: true,
+}).extend({
+  description: z.string().min(1, "Description is required"),
+  amount: z.coerce.number().min(0, "Amount must be positive"),
+});
+
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type ShowExpense = typeof showExpenses.$inferSelect;
+
+export const showMembers = pgTable("show_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  showId: varchar("show_id").notNull(),
+  name: text("name").notNull(),
+  role: memberRoleEnum("role").notNull(),
+  paymentType: paymentTypeEnum("payment_type").notNull(),
+  paymentValue: integer("payment_value").notNull(),
+  isReferrer: boolean("is_referrer").notNull().default(false),
+  calculatedAmount: integer("calculated_amount").notNull().default(0),
+});
+
+export const insertMemberSchema = createInsertSchema(showMembers).omit({
+  id: true,
+}).extend({
+  name: z.string().min(1, "Name is required"),
+  paymentValue: z.coerce.number().min(0),
+  calculatedAmount: z.coerce.number().min(0).optional(),
+});
+
+export type InsertMember = z.infer<typeof insertMemberSchema>;
+export type ShowMember = typeof showMembers.$inferSelect;
+
+export const settings = pgTable("settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  key: text("key").notNull(),
+  value: text("value").notNull(),
+});
+
+export type Setting = typeof settings.$inferSelect;
+
+export const defaultSettings: Record<string, string> = {
+  session_player_percentage: "15",
+  referral_percentage: "33",
+  wahab_fixed_rate: "15000",
+  manager_default_rate: "3000",
+};
+
+export const memberPresets = [
+  { name: "Zain Shahid", role: "session_player" as const, paymentType: "percentage" as const, settingsKey: "session_player_percentage" },
+  { name: "Wahab", role: "session_player" as const, paymentType: "fixed" as const, settingsKey: "wahab_fixed_rate" },
+  { name: "Hassan", role: "manager" as const, paymentType: "fixed" as const, settingsKey: "manager_default_rate" },
+] as const;

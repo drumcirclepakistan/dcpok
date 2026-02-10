@@ -14,12 +14,13 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, CalendarPlus, ListMusic, LogOut, Drum } from "lucide-react";
+import { LayoutDashboard, CalendarPlus, ListMusic, LogOut, Drum, Settings } from "lucide-react";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Shows", url: "/shows", icon: ListMusic },
   { title: "Add Show", url: "/shows/new", icon: CalendarPlus },
+  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {

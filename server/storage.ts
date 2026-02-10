@@ -1,6 +1,12 @@
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import { users, shows, type User, type InsertUser, type Show, type InsertShow } from "@shared/schema";
+import {
+  users, shows, showExpenses, showMembers, settings,
+  type User, type InsertUser, type Show, type InsertShow,
+  type ShowExpense, type InsertExpense,
+  type ShowMember, type InsertMember,
+  type Setting,
+} from "@shared/schema";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
 
@@ -29,6 +35,20 @@ export interface IStorage {
   createShow(show: InsertShow & { userId: string }): Promise<Show>;
   updateShow(id: string, show: Partial<InsertShow>): Promise<Show | undefined>;
   deleteShow(id: string): Promise<boolean>;
+
+  getShowExpenses(showId: string): Promise<ShowExpense[]>;
+  createExpense(expense: InsertExpense): Promise<ShowExpense>;
+  updateExpense(id: string, data: Partial<InsertExpense>): Promise<ShowExpense | undefined>;
+  deleteExpense(id: string): Promise<boolean>;
+
+  getShowMembers(showId: string): Promise<ShowMember[]>;
+  createMember(member: InsertMember): Promise<ShowMember>;
+  updateMember(id: string, data: Partial<InsertMember>): Promise<ShowMember | undefined>;
+  deleteMember(id: string): Promise<boolean>;
+  deleteShowMembers(showId: string): Promise<void>;
+
+  getSettings(userId: string): Promise<Setting[]>;
+  upsertSetting(userId: string, key: string, value: string): Promise<Setting>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -75,8 +95,75 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteShow(id: string): Promise<boolean> {
+    await db.delete(showExpenses).where(eq(showExpenses.showId, id));
+    await db.delete(showMembers).where(eq(showMembers.showId, id));
     const result = await db.delete(shows).where(eq(shows.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getShowExpenses(showId: string): Promise<ShowExpense[]> {
+    return db.select().from(showExpenses).where(eq(showExpenses.showId, showId));
+  }
+
+  async createExpense(expense: InsertExpense): Promise<ShowExpense> {
+    const [created] = await db.insert(showExpenses).values(expense).returning();
+    return created;
+  }
+
+  async updateExpense(id: string, data: Partial<InsertExpense>): Promise<ShowExpense | undefined> {
+    const [updated] = await db.update(showExpenses).set(data).where(eq(showExpenses.id, id)).returning();
+    return updated;
+  }
+
+  async deleteExpense(id: string): Promise<boolean> {
+    const result = await db.delete(showExpenses).where(eq(showExpenses.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getShowMembers(showId: string): Promise<ShowMember[]> {
+    return db.select().from(showMembers).where(eq(showMembers.showId, showId));
+  }
+
+  async createMember(member: InsertMember): Promise<ShowMember> {
+    const [created] = await db.insert(showMembers).values(member).returning();
+    return created;
+  }
+
+  async updateMember(id: string, data: Partial<InsertMember>): Promise<ShowMember | undefined> {
+    const [updated] = await db.update(showMembers).set(data).where(eq(showMembers.id, id)).returning();
+    return updated;
+  }
+
+  async deleteMember(id: string): Promise<boolean> {
+    const result = await db.delete(showMembers).where(eq(showMembers.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async deleteShowMembers(showId: string): Promise<void> {
+    await db.delete(showMembers).where(eq(showMembers.showId, showId));
+  }
+
+  async getSettings(userId: string): Promise<Setting[]> {
+    return db.select().from(settings).where(eq(settings.userId, userId));
+  }
+
+  async upsertSetting(userId: string, key: string, value: string): Promise<Setting> {
+    const existing = await db.select().from(settings)
+      .where(eq(settings.userId, userId))
+      .then(rows => rows.find(r => r.key === key));
+
+    if (existing) {
+      const [updated] = await db.update(settings)
+        .set({ value })
+        .where(eq(settings.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    const [created] = await db.insert(settings)
+      .values({ userId, key, value })
+      .returning();
+    return created;
   }
 }
 

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
-import { insertShowSchema } from "@shared/schema";
+import { insertShowSchema, insertExpenseSchema, insertMemberSchema, defaultSettings } from "@shared/schema";
 import { seedDatabase } from "./seed";
 
 declare module "express-session" {
@@ -43,19 +43,23 @@ export async function registerRoutes(
     })
   );
 
-  // Push schema & seed
-  const { migrate } = await import("drizzle-orm/node-postgres/migrator");
   const { db } = await import("./db");
-  const schema = await import("@shared/schema");
   const { sql } = await import("drizzle-orm");
 
-  // Create enums and tables
   await db.execute(sql`DO $$ BEGIN
     CREATE TYPE show_type AS ENUM ('Corporate', 'Private', 'Public', 'University');
   EXCEPTION WHEN duplicate_object THEN null; END $$`);
 
   await db.execute(sql`DO $$ BEGIN
     CREATE TYPE show_status AS ENUM ('upcoming', 'completed', 'cancelled');
+  EXCEPTION WHEN duplicate_object THEN null; END $$`);
+
+  await db.execute(sql`DO $$ BEGIN
+    CREATE TYPE member_role AS ENUM ('session_player', 'manager', 'other');
+  EXCEPTION WHEN duplicate_object THEN null; END $$`);
+
+  await db.execute(sql`DO $$ BEGIN
+    CREATE TYPE payment_type AS ENUM ('percentage', 'fixed', 'manual');
   EXCEPTION WHEN duplicate_object THEN null; END $$`);
 
   await db.execute(sql`
@@ -80,8 +84,47 @@ export async function registerRoutes(
       show_date TIMESTAMP NOT NULL,
       status show_status NOT NULL DEFAULT 'upcoming',
       notes TEXT,
+      poc_name TEXT,
+      poc_phone TEXT,
+      poc_email TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT now(),
       user_id VARCHAR NOT NULL
+    )
+  `);
+
+  // Add POC columns if they don't exist (migration for existing tables)
+  await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_name TEXT`);
+  await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_phone TEXT`);
+  await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_email TEXT`);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS show_expenses (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      show_id VARCHAR NOT NULL,
+      description TEXT NOT NULL,
+      amount INTEGER NOT NULL
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS show_members (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      show_id VARCHAR NOT NULL,
+      name TEXT NOT NULL,
+      role member_role NOT NULL,
+      payment_type payment_type NOT NULL,
+      payment_value INTEGER NOT NULL,
+      is_referrer BOOLEAN NOT NULL DEFAULT false,
+      calculated_amount INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS settings (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL
     )
   `);
 
@@ -130,12 +173,12 @@ export async function registerRoutes(
 
   // Shows CRUD
   app.get("/api/shows", requireAuth, async (req, res) => {
-    const shows = await storage.getShows(req.session.userId!);
-    res.json(shows);
+    const showsList = await storage.getShows(req.session.userId!);
+    res.json(showsList);
   });
 
   app.get("/api/shows/:id", requireAuth, async (req, res) => {
-    const show = await storage.getShow(req.params.id);
+    const show = await storage.getShow(req.params.id as string);
     if (!show || show.userId !== req.session.userId) {
       return res.status(404).json({ message: "Show not found" });
     }
@@ -157,12 +200,12 @@ export async function registerRoutes(
 
   app.patch("/api/shows/:id", requireAuth, async (req, res) => {
     try {
-      const existing = await storage.getShow(req.params.id);
+      const existing = await storage.getShow(req.params.id as string);
       if (!existing || existing.userId !== req.session.userId) {
         return res.status(404).json({ message: "Show not found" });
       }
       const parsed = insertShowSchema.partial().parse(req.body);
-      const updated = await storage.updateShow(req.params.id, parsed);
+      const updated = await storage.updateShow(req.params.id as string, parsed);
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Update failed" });
@@ -170,12 +213,127 @@ export async function registerRoutes(
   });
 
   app.delete("/api/shows/:id", requireAuth, async (req, res) => {
-    const existing = await storage.getShow(req.params.id);
+    const existing = await storage.getShow(req.params.id as string);
     if (!existing || existing.userId !== req.session.userId) {
       return res.status(404).json({ message: "Show not found" });
     }
-    await storage.deleteShow(req.params.id);
+    await storage.deleteShow(req.params.id as string);
     res.json({ message: "Deleted" });
+  });
+
+  // Show Expenses
+  app.get("/api/shows/:id/expenses", requireAuth, async (req, res) => {
+    const show = await storage.getShow(req.params.id as string);
+    if (!show || show.userId !== req.session.userId) {
+      return res.status(404).json({ message: "Show not found" });
+    }
+    const expenses = await storage.getShowExpenses(req.params.id as string);
+    res.json(expenses);
+  });
+
+  app.post("/api/shows/:id/expenses", requireAuth, async (req, res) => {
+    try {
+      const show = await storage.getShow(req.params.id as string);
+      if (!show || show.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Show not found" });
+      }
+      const parsed = insertExpenseSchema.parse({ ...req.body, showId: req.params.id });
+      const expense = await storage.createExpense(parsed);
+      res.status(201).json(expense);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Invalid expense data" });
+    }
+  });
+
+  app.delete("/api/shows/:id/expenses/:expenseId", requireAuth, async (req, res) => {
+    await storage.deleteExpense(req.params.expenseId as string);
+    res.json({ message: "Deleted" });
+  });
+
+  // Show Members
+  app.get("/api/shows/:id/members", requireAuth, async (req, res) => {
+    const show = await storage.getShow(req.params.id as string);
+    if (!show || show.userId !== req.session.userId) {
+      return res.status(404).json({ message: "Show not found" });
+    }
+    const members = await storage.getShowMembers(req.params.id as string);
+    res.json(members);
+  });
+
+  app.post("/api/shows/:id/members", requireAuth, async (req, res) => {
+    try {
+      const show = await storage.getShow(req.params.id as string);
+      if (!show || show.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Show not found" });
+      }
+      const parsed = insertMemberSchema.parse({ ...req.body, showId: req.params.id });
+      const member = await storage.createMember(parsed);
+      res.status(201).json(member);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Invalid member data" });
+    }
+  });
+
+  app.patch("/api/shows/:id/members/:memberId", requireAuth, async (req, res) => {
+    try {
+      const updated = await storage.updateMember(req.params.memberId as string, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Update failed" });
+    }
+  });
+
+  app.delete("/api/shows/:id/members/:memberId", requireAuth, async (req, res) => {
+    await storage.deleteMember(req.params.memberId as string);
+    res.json({ message: "Deleted" });
+  });
+
+  // Save all members for a show at once (replaces existing)
+  app.put("/api/shows/:id/members", requireAuth, async (req, res) => {
+    try {
+      const show = await storage.getShow(req.params.id as string);
+      if (!show || show.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Show not found" });
+      }
+      await storage.deleteShowMembers(req.params.id as string);
+      const members = req.body.members || [];
+      const created = [];
+      for (const m of members) {
+        const parsed = insertMemberSchema.parse({ ...m, showId: req.params.id });
+        const member = await storage.createMember(parsed);
+        created.push(member);
+      }
+      res.json(created);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Invalid member data" });
+    }
+  });
+
+  // Settings
+  app.get("/api/settings", requireAuth, async (req, res) => {
+    const userSettings = await storage.getSettings(req.session.userId!);
+    const merged = { ...defaultSettings };
+    for (const s of userSettings) {
+      merged[s.key] = s.value;
+    }
+    res.json(merged);
+  });
+
+  app.put("/api/settings", requireAuth, async (req, res) => {
+    try {
+      const entries = Object.entries(req.body) as [string, string][];
+      for (const [key, value] of entries) {
+        await storage.upsertSetting(req.session.userId!, key, String(value));
+      }
+      const userSettings = await storage.getSettings(req.session.userId!);
+      const merged = { ...defaultSettings };
+      for (const s of userSettings) {
+        merged[s.key] = s.value;
+      }
+      res.json(merged);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Update failed" });
+    }
   });
 
   return httpServer;
