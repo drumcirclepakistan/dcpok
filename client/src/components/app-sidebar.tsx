@@ -26,7 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LayoutDashboard, CalendarPlus, ListMusic, LogOut, Drum, Settings, Wallet, BookOpen, Pencil, Loader2 } from "lucide-react";
+import { LayoutDashboard, CalendarPlus, ListMusic, LogOut, Drum, Settings, Wallet, BookOpen, Pencil, Loader2, FileText } from "lucide-react";
 import { useMemo, useState } from "react";
 
 export function AppSidebar() {
@@ -60,6 +60,7 @@ export function AppSidebar() {
         items.push({ title: "Add Show", url: "/shows/new", icon: CalendarPlus });
       }
       items.push({ title: "Financials", url: "/financials", icon: Wallet });
+      items.push({ title: "Payout Policy", url: "/policy", icon: FileText });
       return items;
     }
     return [

@@ -17,6 +17,7 @@ import ShowDetail from "@/pages/show-detail";
 import SettingsPage from "@/pages/settings";
 import FinancialsPage from "@/pages/financials";
 import DirectoryPage from "@/pages/directory";
+import PolicyPage from "@/pages/policy";
 
 function Router() {
   return (
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/shows/:id" component={ShowDetail} />
       <Route path="/directory" component={DirectoryPage} />
       <Route path="/financials" component={FinancialsPage} />
+      <Route path="/policy" component={PolicyPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>

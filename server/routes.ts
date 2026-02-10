@@ -740,6 +740,7 @@ export async function registerRoutes(
             isUpcoming,
             organizationName: show.organizationName,
             publicShowFor: show.publicShowFor,
+            isReferrer: found.isReferrer,
           });
         }
       }
@@ -785,6 +786,7 @@ export async function registerRoutes(
       let showsPerformed = 0;
       let upcomingCount = 0;
       let pendingPayments = 0;
+      let referredCount = 0;
       const cityCount: Record<string, number> = {};
       const typeCount: Record<string, number> = {};
       const upcomingShows: any[] = [];
@@ -801,6 +803,8 @@ export async function registerRoutes(
         const myEarning = calcPayout(found, show.totalAmount, net, expenseSum);
         const isUpcoming = new Date(show.showDate) > new Date();
 
+        if (found.isReferrer) referredCount++;
+
         const showInfo = {
           id: show.id,
           title: show.title,
@@ -811,6 +815,7 @@ export async function registerRoutes(
           isPaid: show.isPaid,
           status: show.status,
           totalAmount: show.totalAmount,
+          isReferrer: found.isReferrer,
         };
 
         if (isUpcoming) {
@@ -851,6 +856,7 @@ export async function registerRoutes(
         showsPerformed,
         upcomingCount: totalUpcoming,
         pendingPayments: totalPending,
+        referredCount,
         topCities,
         topTypes,
         upcomingShows: upcomingShows.sort((a: any, b: any) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime()),
@@ -896,6 +902,7 @@ export async function registerRoutes(
       const upcomingShows: any[] = [];
       let totalEarnings = 0;
       let totalShowsPerformed = 0;
+      let referredCount = 0;
       const citySet: Record<string, number> = {};
 
       for (const show of filteredShows) {
@@ -909,6 +916,8 @@ export async function registerRoutes(
         const myEarning = calcPayout(found, show.totalAmount, net, expenseSum);
         const isUpcoming = new Date(show.showDate) > new Date();
 
+        if (found.isReferrer) referredCount++;
+
         const detail = {
           id: show.id,
           title: show.title,
@@ -918,6 +927,7 @@ export async function registerRoutes(
           totalAmount: show.totalAmount,
           memberEarning: myEarning,
           isPaid: show.isPaid,
+          isReferrer: found.isReferrer,
         };
 
         if (isUpcoming) {
@@ -948,12 +958,35 @@ export async function registerRoutes(
         unpaidAmount,
         pendingAmount,
         upcomingShowsCount: upcomingShows.length,
+        referredCount,
         cities,
         shows: pastShows.sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()),
         upcomingShows: upcomingShows.sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime()),
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to compute member financials" });
+    }
+  });
+
+  // Member: get own payout policy
+  app.get("/api/member/policy", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+
+      res.json({
+        name: member.name,
+        role: member.role,
+        customRole: member.customRole,
+        paymentType: member.paymentType,
+        normalRate: member.normalRate,
+        referralRate: member.referralRate,
+        hasMinLogic: member.hasMinLogic,
+        minThreshold: member.minThreshold,
+        minFlatRate: member.minFlatRate,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch policy" });
     }
   });
 

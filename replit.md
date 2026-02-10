@@ -56,7 +56,10 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
   - `canAddShows`: Allows member to create new shows via the show form; member is auto-added to band section as referrer
   - `canEditName`: Allows member to update their display name via pencil icon in sidebar (propagates to show_members records)
 - **Route Protection**: All admin routes use `requireAdmin` middleware; members cannot access show details, settings, expenses, or other admin-only features
-- **Sidebar**: Members see Dashboard, My Shows, My Earnings (no Settings, no Show Detail links)
+- **Referred by you**: Shows tagged with "Referred by you" badge on shows page, dashboard upcoming/completed shows, and financials show lists
+- **Shows Referred stat**: Count of referred shows displayed on dashboard and financials (visible when > 0)
+- **Payout Policy page**: Member-only page showing payment structure (type, rates, referral rate, minimum logic) with descriptive explanations
+- **Sidebar**: Members see Dashboard, My Shows, Add Show (if permitted), Financials, Payout Policy (no Settings, no Show Detail links)
 
 ## Payment Rules (Dynamic Per-Member Configs)
 - Each band member has configurable payment settings stored in `band_members` table:
@@ -119,6 +122,7 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - `GET /api/member/financials?from=&to=` - Member financial stats (member)
 - `PATCH /api/member/name` - Update member's own name (member, requires canEditName)
 - `POST /api/member/shows` - Create show as member (member, requires canAddShows)
+- `GET /api/member/policy` - Get member's payout policy/payment config (member)
 
 ## User Preferences
 - Pakistani Rupees (Rs) for currency

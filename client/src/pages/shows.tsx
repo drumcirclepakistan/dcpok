@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarPlus, Search, ListMusic, Filter, AlertCircle, CheckCircle } from "lucide-react";
+import { CalendarPlus, Search, ListMusic, Filter, AlertCircle, CheckCircle, UserCheck } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
@@ -25,6 +25,7 @@ interface MemberShow {
   isUpcoming: boolean;
   organizationName?: string | null;
   publicShowFor?: string | null;
+  isReferrer?: boolean;
 }
 
 const statusColors: Record<string, string> = {
@@ -64,6 +65,7 @@ export default function ShowsPage() {
         ...s,
         advancePayment: 0,
         status: s.isUpcoming ? "upcoming" : (s.status || "completed"),
+        isReferrer: s.isReferrer || false,
       }));
     }
     if (isAdmin && shows) {
@@ -72,6 +74,7 @@ export default function ShowsPage() {
         showDate: typeof s.showDate === 'string' ? s.showDate : new Date(s.showDate).toISOString(),
         myEarning: 0,
         isUpcoming: new Date(s.showDate) > new Date(),
+        isReferrer: false,
       }));
     }
     return [];
@@ -166,6 +169,12 @@ export default function ShowsPage() {
                       Advance not paid
                     </Badge>
                   ) : null}
+                  {isMember && show.isReferrer && (
+                    <Badge variant="outline" className="text-[10px] text-primary">
+                      <UserCheck className="w-2.5 h-2.5 mr-0.5" />
+                      Referred by you
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className="text-xs text-muted-foreground">{show.city}</span>

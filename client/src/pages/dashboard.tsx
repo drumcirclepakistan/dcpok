@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth";
 import {
   CalendarDays, TrendingUp, Music, MapPin, Layers,
   Wallet, Receipt, Crown, AlertCircle, AlertTriangle, Calendar as CalendarIcon,
-  CheckCircle,
+  CheckCircle, UserCheck,
 } from "lucide-react";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths, subYears, endOfDay } from "date-fns";
 import { Link } from "wouter";
@@ -43,15 +43,21 @@ interface DashboardStats {
   topTypes: { type: string; count: number }[];
 }
 
+interface MemberDashboardShow extends Show {
+  isReferrer?: boolean;
+  myEarning?: number;
+}
+
 interface MemberDashboardStats {
   totalEarnings: number;
   showsPerformed: number;
   upcomingCount: number;
   pendingPayments: number;
+  referredCount: number;
   topCities: { city: string; count: number }[];
   topTypes: { type: string; count: number }[];
-  upcomingShows: Show[];
-  completedShows: Show[];
+  upcomingShows: MemberDashboardShow[];
+  completedShows: MemberDashboardShow[];
 }
 
 function getDateRange(range: TimeRange, customRange: CustomDateRange | undefined): { from?: string; to?: string } {
@@ -289,6 +295,14 @@ export default function Dashboard() {
                   icon={Wallet}
                   testId="stat-pending-payments"
                 />
+                {(memberStats?.referredCount || 0) > 0 && (
+                  <StatCard
+                    label="Shows Referred"
+                    value={memberStats?.referredCount || 0}
+                    icon={UserCheck}
+                    testId="stat-referred-shows"
+                  />
+                )}
               </>
             )}
           </div>
@@ -383,35 +397,41 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-2">
                 {memberUpcoming.map((show) => (
-                  <Link key={show.id} href={`/shows/${show.id}`}>
-                    <Card className="hover-elevate cursor-pointer" data-testid={`card-upcoming-show-${show.id}`}>
-                      <CardContent className="pt-4 pb-4">
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
-                          <div className="min-w-0">
+                  <Card key={show.id} data-testid={`card-upcoming-show-${show.id}`}>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-medium text-sm truncate" data-testid={`text-upcoming-show-title-${show.id}`}>
                               {show.title}
                             </p>
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <span className="text-xs text-muted-foreground">
-                                {show.city}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {format(new Date(show.showDate), "MMM d, yyyy")}
-                              </span>
-                            </div>
+                            {show.isReferrer && (
+                              <Badge variant="outline" className="text-[10px] text-primary">
+                                <UserCheck className="w-2.5 h-2.5 mr-0.5" />
+                                Referred by you
+                              </Badge>
+                            )}
                           </div>
-                          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                            <Badge variant={showTypeBadgeVariant(show.showType) as any}>
-                              {show.showType}
-                            </Badge>
-                            <span className="text-sm font-semibold" data-testid={`text-upcoming-show-amount-${show.id}`}>
-                              Rs {show.totalAmount.toLocaleString()}
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-xs text-muted-foreground">
+                              {show.city}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(show.showDate), "MMM d, yyyy")}
                             </span>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
+                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                          <Badge variant={showTypeBadgeVariant(show.showType) as any}>
+                            {show.showType}
+                          </Badge>
+                          <span className="text-sm font-semibold" data-testid={`text-upcoming-show-amount-${show.id}`}>
+                            Rs {show.totalAmount.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             )}
@@ -447,35 +467,41 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-2">
                 {memberCompleted.map((show) => (
-                  <Link key={show.id} href={`/shows/${show.id}`}>
-                    <Card className="hover-elevate cursor-pointer" data-testid={`card-completed-show-${show.id}`}>
-                      <CardContent className="pt-4 pb-4">
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
-                          <div className="min-w-0">
+                  <Card key={show.id} data-testid={`card-completed-show-${show.id}`}>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-medium text-sm truncate" data-testid={`text-completed-show-title-${show.id}`}>
                               {show.title}
                             </p>
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <span className="text-xs text-muted-foreground">
-                                {show.city}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {format(new Date(show.showDate), "MMM d, yyyy")}
-                              </span>
-                            </div>
+                            {show.isReferrer && (
+                              <Badge variant="outline" className="text-[10px] text-primary">
+                                <UserCheck className="w-2.5 h-2.5 mr-0.5" />
+                                Referred by you
+                              </Badge>
+                            )}
                           </div>
-                          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                            <Badge variant={showTypeBadgeVariant(show.showType) as any}>
-                              {show.showType}
-                            </Badge>
-                            <span className="text-sm font-semibold" data-testid={`text-completed-show-amount-${show.id}`}>
-                              Rs {show.totalAmount.toLocaleString()}
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-xs text-muted-foreground">
+                              {show.city}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(show.showDate), "MMM d, yyyy")}
                             </span>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
+                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                          <Badge variant={showTypeBadgeVariant(show.showType) as any}>
+                            {show.showType}
+                          </Badge>
+                          <span className="text-sm font-semibold" data-testid={`text-completed-show-amount-${show.id}`}>
+                            Rs {show.totalAmount.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             )}

@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import {
   TrendingUp, Wallet, MapPin, Music, Calendar as CalendarIcon,
-  BarChart3, CheckCircle, AlertCircle, ArrowUpRight,
+  BarChart3, CheckCircle, AlertCircle, ArrowUpRight, UserCheck,
 } from "lucide-react";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths, subYears, endOfDay } from "date-fns";
 import { Link } from "wouter";
@@ -37,6 +37,7 @@ interface FinancialShow {
   totalAmount: number;
   memberEarning: number;
   isPaid: boolean;
+  isReferrer?: boolean;
 }
 
 interface FinancialStats {
@@ -49,6 +50,7 @@ interface FinancialStats {
   unpaidAmount: number;
   pendingAmount: number;
   upcomingShowsCount: number;
+  referredCount?: number;
   cities: { city: string; count: number }[];
   shows: FinancialShow[];
   upcomingShows: FinancialShow[];
@@ -301,6 +303,23 @@ export default function FinancialsPage() {
                 )}
               </CardContent>
             </Card>
+            {isMember && (stats?.referredCount || 0) > 0 && (
+              <Card>
+                <CardContent className="pt-5 pb-5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Shows Referred</p>
+                      <p className="text-xl font-bold mt-1" data-testid="stat-referred-count">
+                        {stats?.referredCount || 0}
+                      </p>
+                    </div>
+                    <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <UserCheck className="w-4 h-4 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -389,6 +408,12 @@ export default function FinancialsPage() {
                                 <CalendarIcon className="w-2.5 h-2.5 mr-0.5" />
                                 Upcoming
                               </Badge>
+                              {isMember && show.isReferrer && (
+                                <Badge variant="outline" className="text-[10px] text-primary">
+                                  <UserCheck className="w-2.5 h-2.5 mr-0.5" />
+                                  Referred by you
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <span className="text-xs text-muted-foreground">{show.city}</span>
@@ -469,6 +494,12 @@ export default function FinancialsPage() {
                                 <Badge variant="destructive" className="text-[10px]">
                                   <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
                                   Unpaid
+                                </Badge>
+                              )}
+                              {isMember && show.isReferrer && (
+                                <Badge variant="outline" className="text-[10px] text-primary">
+                                  <UserCheck className="w-2.5 h-2.5 mr-0.5" />
+                                  Referred by you
                                 </Badge>
                               )}
                             </div>
