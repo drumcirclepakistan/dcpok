@@ -1,11 +1,12 @@
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import {
-  users, shows, showExpenses, showMembers, settings,
+  users, shows, showExpenses, showMembers, settings, bandMembers,
   type User, type InsertUser, type Show, type InsertShow,
   type ShowExpense, type InsertExpense,
   type ShowMember, type InsertMember,
   type Setting,
+  type BandMember, type InsertBandMember,
 } from "@shared/schema";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
@@ -49,6 +50,16 @@ export interface IStorage {
 
   getSettings(userId: string): Promise<Setting[]>;
   upsertSetting(userId: string, key: string, value: string): Promise<Setting>;
+
+  getBandMembers(): Promise<BandMember[]>;
+  getBandMember(id: string): Promise<BandMember | undefined>;
+  createBandMember(member: InsertBandMember): Promise<BandMember>;
+  updateBandMember(id: string, data: Partial<InsertBandMember>): Promise<BandMember | undefined>;
+  deleteBandMember(id: string): Promise<boolean>;
+
+  getAllUsers(): Promise<User[]>;
+  updateUser(id: string, data: Partial<{ password: string; displayName: string; role: string }>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -164,6 +175,48 @@ export class DatabaseStorage implements IStorage {
       .values({ userId, key, value })
       .returning();
     return created;
+  }
+
+  async getBandMembers(): Promise<BandMember[]> {
+    return db.select().from(bandMembers);
+  }
+
+  async getBandMember(id: string): Promise<BandMember | undefined> {
+    const [member] = await db.select().from(bandMembers).where(eq(bandMembers.id, id));
+    return member;
+  }
+
+  async createBandMember(member: InsertBandMember): Promise<BandMember> {
+    const [created] = await db.insert(bandMembers).values(member).returning();
+    return created;
+  }
+
+  async updateBandMember(id: string, data: Partial<InsertBandMember>): Promise<BandMember | undefined> {
+    const [updated] = await db.update(bandMembers).set(data).where(eq(bandMembers.id, id)).returning();
+    return updated;
+  }
+
+  async deleteBandMember(id: string): Promise<boolean> {
+    const result = await db.delete(bandMembers).where(eq(bandMembers.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users);
+  }
+
+  async updateUser(id: string, data: Partial<{ password: string; displayName: string; role: string }>): Promise<User | undefined> {
+    const updateData: any = {};
+    if (data.displayName) updateData.displayName = data.displayName;
+    if (data.role) updateData.role = data.role;
+    if (data.password) updateData.password = await hashPassword(data.password);
+    const [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+    return updated;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, id)).returning();
+    return result.length > 0;
   }
 }
 

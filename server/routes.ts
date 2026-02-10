@@ -19,6 +19,17 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+  const user = await storage.getUser(req.session.userId);
+  if (!user || user.role !== "founder") {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -97,6 +108,7 @@ export async function registerRoutes(
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_phone TEXT`);
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_email TEXT`);
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS public_show_for TEXT`);
 
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS show_expenses (
@@ -126,6 +138,16 @@ export async function registerRoutes(
       user_id VARCHAR NOT NULL,
       key TEXT NOT NULL,
       value TEXT NOT NULL
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS band_members (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'session_player',
+      custom_role TEXT,
+      user_id VARCHAR
     )
   `);
 
@@ -176,6 +198,34 @@ export async function registerRoutes(
   app.get("/api/shows", requireAuth, async (req, res) => {
     const showsList = await storage.getShows(req.session.userId!);
     res.json(showsList);
+  });
+
+  // Duplicate date check (must be before :id route)
+  app.get("/api/shows/check-date", requireAuth, async (req, res) => {
+    try {
+      const { date, excludeId } = req.query as { date?: string; excludeId?: string };
+      if (!date) return res.json({ conflicts: [] });
+
+      const allShows = await storage.getShows(req.session.userId!);
+      const targetDate = new Date(date);
+      const conflicts = allShows.filter((s) => {
+        if (excludeId && s.id === excludeId) return false;
+        const showDate = new Date(s.showDate);
+        return showDate.getFullYear() === targetDate.getFullYear() &&
+               showDate.getMonth() === targetDate.getMonth() &&
+               showDate.getDate() === targetDate.getDate();
+      }).map((s) => ({
+        id: s.id,
+        title: s.title,
+        city: s.city,
+        showType: s.showType,
+        showDate: s.showDate.toISOString(),
+      }));
+
+      res.json({ conflicts });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to check date" });
+    }
   });
 
   app.get("/api/shows/:id", requireAuth, async (req, res) => {
@@ -564,6 +614,106 @@ export async function registerRoutes(
       res.json(merged);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Update failed" });
+    }
+  });
+
+  // Band Members CRUD
+  app.get("/api/band-members", requireAuth, async (req, res) => {
+    const members = await storage.getBandMembers();
+    res.json(members);
+  });
+
+  app.post("/api/band-members", requireAdmin, async (req, res) => {
+    try {
+      const { name, role, customRole } = req.body;
+      if (!name || !role) {
+        return res.status(400).json({ message: "Name and role are required" });
+      }
+      const member = await storage.createBandMember({ name, role, customRole: customRole || null, userId: null });
+      res.json(member);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Failed to create band member" });
+    }
+  });
+
+  app.patch("/api/band-members/:id", requireAdmin, async (req, res) => {
+    try {
+      const updated = await storage.updateBandMember(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ message: "Band member not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Update failed" });
+    }
+  });
+
+  app.delete("/api/band-members/:id", requireAdmin, async (req, res) => {
+    const deleted = await storage.deleteBandMember(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Band member not found" });
+    res.json({ message: "Band member deleted" });
+  });
+
+  // Member account management
+  app.post("/api/band-members/:id/create-account", requireAdmin, async (req, res) => {
+    try {
+      const member = await storage.getBandMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Band member not found" });
+      if (member.userId) return res.status(400).json({ message: "This member already has an account" });
+
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+
+      const user = await storage.createUser({
+        username,
+        password,
+        displayName: member.name,
+      });
+      await storage.updateUser(user.id, { role: "member" });
+      await storage.updateBandMember(member.id, { userId: user.id });
+
+      res.json({ message: "Account created", userId: user.id });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Failed to create account" });
+    }
+  });
+
+  app.post("/api/band-members/:id/reset-password", requireAdmin, async (req, res) => {
+    try {
+      const member = await storage.getBandMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Band member not found" });
+      if (!member.userId) return res.status(400).json({ message: "This member has no account" });
+
+      const { password } = req.body;
+      if (!password || password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      await storage.updateUser(member.userId, { password });
+      res.json({ message: "Password reset successfully" });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Failed to reset password" });
+    }
+  });
+
+  app.delete("/api/band-members/:id/delete-account", requireAdmin, async (req, res) => {
+    try {
+      const member = await storage.getBandMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Band member not found" });
+      if (!member.userId) return res.status(400).json({ message: "This member has no account" });
+
+      await storage.deleteUser(member.userId);
+      await storage.updateBandMember(member.id, { userId: null });
+      res.json({ message: "Account deleted" });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Failed to delete account" });
     }
   });
 

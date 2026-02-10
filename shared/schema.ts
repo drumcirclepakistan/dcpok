@@ -108,6 +108,26 @@ export const insertMemberSchema = createInsertSchema(showMembers).omit({
 export type InsertMember = z.infer<typeof insertMemberSchema>;
 export type ShowMember = typeof showMembers.$inferSelect;
 
+export const bandMembers = pgTable("band_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  role: text("role").notNull().default("session_player"),
+  customRole: text("custom_role"),
+  userId: varchar("user_id"),
+});
+
+export const insertBandMemberSchema = createInsertSchema(bandMembers).omit({
+  id: true,
+}).extend({
+  name: z.string().min(1, "Name is required"),
+  role: z.string().min(1, "Role is required"),
+  customRole: z.string().optional().nullable(),
+  userId: z.string().optional().nullable(),
+});
+
+export type InsertBandMember = z.infer<typeof insertBandMemberSchema>;
+export type BandMember = typeof bandMembers.$inferSelect;
+
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),

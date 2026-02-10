@@ -1,8 +1,15 @@
 import { storage } from "./storage";
 import { db } from "./db";
-import { users, shows } from "@shared/schema";
+import { users, shows, bandMembers } from "@shared/schema";
 
 export async function seedDatabase() {
+  const existingMembers = await db.select().from(bandMembers);
+  if (existingMembers.length === 0) {
+    await storage.createBandMember({ name: "Zain Shahid", role: "session_player", customRole: null, userId: null });
+    await storage.createBandMember({ name: "Wahab", role: "session_player", customRole: null, userId: null });
+    await storage.createBandMember({ name: "Hassan", role: "manager", customRole: null, userId: null });
+  }
+
   const existingUsers = await db.select().from(users);
   if (existingUsers.length > 0) return;
 
@@ -79,5 +86,5 @@ export async function seedDatabase() {
     await db.insert(shows).values(show);
   }
 
-  console.log("Database seeded with Haider Jamil account and sample shows");
+  console.log("Database seeded with Haider Jamil account, sample shows, and band members");
 }

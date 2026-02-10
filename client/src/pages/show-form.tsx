@@ -12,6 +12,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -26,9 +36,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Loader2, Save, User, Phone, Mail } from "lucide-react";
+import { ArrowLeft, Loader2, Save, User, Phone, Mail, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
+
+interface ConflictShow {
+  id: string;
+  title: string;
+  city: string;
+  showType: string;
+  showDate: string;
+}
 
 export default function ShowForm() {
   const { id } = useParams<{ id: string }>();
@@ -36,6 +54,9 @@ export default function ShowForm() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [conflictShows, setConflictShows] = useState<ConflictShow[]>([]);
+  const [pendingData, setPendingData] = useState<InsertShow | null>(null);
 
   const { data: existingShow, isLoading: isLoadingShow } = useQuery<Show>({
     queryKey: ["/api/shows", id],
@@ -108,8 +129,42 @@ export default function ShowForm() {
     },
   });
 
-  const onSubmit = (data: InsertShow) => {
+  const checkDateConflicts = useCallback(async (data: InsertShow) => {
+    try {
+      const dateStr = new Date(data.showDate).toISOString();
+      const params = new URLSearchParams({ date: dateStr });
+      if (isEditing && id) params.set("excludeId", id);
+      const res = await fetch(`/api/shows/check-date?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.conflicts as ConflictShow[];
+    } catch {
+      return [];
+    }
+  }, [isEditing, id]);
+
+  const onSubmit = async (data: InsertShow) => {
+    const conflicts = await checkDateConflicts(data);
+    if (conflicts.length > 0) {
+      setConflictShows(conflicts);
+      setPendingData(data);
+      setShowConflictDialog(true);
+      return;
+    }
     mutation.mutate(data);
+  };
+
+  const handleConfirmConflict = () => {
+    setShowConflictDialog(false);
+    if (pendingData) {
+      mutation.mutate(pendingData);
+      setPendingData(null);
+    }
+  };
+
+  const handleCancelConflict = () => {
+    setShowConflictDialog(false);
+    setPendingData(null);
   };
 
   const showType = form.watch("showType");
@@ -446,6 +501,45 @@ export default function ShowForm() {
           </Form>
         </CardContent>
       </Card>
+
+      <AlertDialog open={showConflictDialog} onOpenChange={setShowConflictDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              Show Date Conflict
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  {conflictShows.length === 1
+                    ? "Another show is already scheduled on the same day:"
+                    : `${conflictShows.length} other shows are already scheduled on the same day:`}
+                </p>
+                <div className="space-y-2">
+                  {conflictShows.map((s) => (
+                    <div key={s.id} className="p-2 border rounded-md">
+                      <p className="text-sm font-medium text-foreground">{s.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.city} - {s.showType} - {format(new Date(s.showDate), "h:mm a")}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p>Do you still wish to continue?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelConflict} data-testid="button-conflict-no">
+              No
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmConflict} data-testid="button-conflict-yes">
+              Yes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

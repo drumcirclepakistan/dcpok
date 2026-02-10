@@ -1,7 +1,7 @@
 # Drum Circle Pakistan - Band Management System
 
 ## Overview
-A modern, mobile-friendly band management web app for Drum Circle Pakistan. Currently built for founder-only access with show management features. Future phases will add band member management, invoices, and quotations.
+A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admin access for Haider Jamil with show management, financial tracking, band member management, and account provisioning. Future phases will add member-facing interfaces, invoices, and quotations.
 
 ## Architecture
 - **Frontend**: React + Vite + TailwindCSS + shadcn/ui components
@@ -11,12 +11,13 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Curr
 - **State**: TanStack React Query
 
 ## Key Features
-- Session-based login (founder account: username `founder`, password `drumcircle2024`)
+- Session-based login (admin account: username `founder`, password `drumcircle2024`)
 - Dashboard with time range filtering (Lifetime, This Year, Last Year, This/Last Month, Last 3/6 Months, Custom)
-- Dashboard stats: Total Shows, Total Revenue, Revenue After Expenses, Founder Earnings, Upcoming Shows, Pending Payments
+- Dashboard stats: Total Shows, Total Revenue, Revenue After Expenses, My Earnings, Upcoming Shows, Pending Payments
 - Dashboard insights: Top Cities, Top Show Types (filtered by time range)
 - Upcoming count and pending payments always show full data regardless of time range
 - Full show CRUD (add, view, edit, delete)
+- Duplicate date warning: Shows alert when adding/editing a show on a date with existing shows
 - Show types: Corporate, Private, Public, University
 - Organization tracking for Corporate/University shows
 - "Public Show For" field for Public shows (e.g. cafe, restaurant name)
@@ -26,7 +27,10 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Curr
 - Paid/Unpaid filter on shows list
 - Show expenses tracking with add/delete
 - Band member assignment per show with automated payment calculations
+- Financials page: Per-member earnings breakdown with date range filtering
 - Configurable payment settings (applies to future shows only)
+- Band member management: Add/remove members, assign roles (Session Player, Manager, Custom)
+- Member account provisioning: Create login accounts, reset passwords, remove access
 - Dark mode toggle
 - Responsive sidebar navigation
 
@@ -38,24 +42,25 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Curr
     - If expenses exist: Rs 15,000 minus (configured % of total expenses)
 - **Wahab**: Fixed rate per show (default Rs 15,000)
 - **Hassan (Manager)**: Fixed rate per show (default Rs 3,000)
-- **Haider Jamil (Founder)**: Gets remainder after all expenses and member payouts
+- **Haider Jamil (Admin)**: Gets remainder after all expenses and member payouts
 
 ## Project Structure
-- `shared/schema.ts` - Drizzle schemas for users, shows, show_expenses, show_members, settings; Zod validation
+- `shared/schema.ts` - Drizzle schemas for users, shows, show_expenses, show_members, band_members, settings; Zod validation
 - `server/db.ts` - Database connection
 - `server/storage.ts` - Storage interface with DatabaseStorage implementation
-- `server/routes.ts` - API routes (auth + shows CRUD + expenses + members + settings + dashboard stats)
-- `server/seed.ts` - Seed data for founder account and sample shows
+- `server/routes.ts` - API routes (auth + shows CRUD + expenses + members + band members + settings + dashboard + financials)
+- `server/seed.ts` - Seed data for admin account, sample shows, and default band members
 - `client/src/lib/auth.tsx` - Auth context provider
 - `client/src/components/app-sidebar.tsx` - Sidebar navigation
 - `client/src/components/theme-toggle.tsx` - Dark/light mode toggle
-- `client/src/pages/` - Login, Dashboard, Shows, ShowForm, ShowDetail, Settings pages
+- `client/src/pages/` - Login, Dashboard, Shows, ShowForm, ShowDetail, Financials, Settings pages
 
 ## API Routes
 - `POST /api/auth/login` - Login
 - `GET /api/auth/me` - Get current user
 - `POST /api/auth/logout` - Logout
 - `GET /api/shows` - List all shows (authenticated)
+- `GET /api/shows/check-date?date=&excludeId=` - Check for shows on same date
 - `GET /api/shows/:id` - Get show detail
 - `POST /api/shows` - Create show
 - `PATCH /api/shows/:id` - Update show
@@ -69,6 +74,14 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Curr
 - `POST /api/shows/:id/members` - Add member
 - `DELETE /api/shows/:id/members/:memberId` - Remove member
 - `GET /api/dashboard/stats?from=&to=` - Aggregated dashboard stats with time range filter
+- `GET /api/financials?member=&from=&to=` - Per-member financial stats
+- `GET /api/band-members` - List all band members
+- `POST /api/band-members` - Add band member
+- `PATCH /api/band-members/:id` - Update band member
+- `DELETE /api/band-members/:id` - Delete band member
+- `POST /api/band-members/:id/create-account` - Create login account for member
+- `POST /api/band-members/:id/reset-password` - Reset member password
+- `DELETE /api/band-members/:id/delete-account` - Delete member login account
 - `GET /api/settings` - Get settings
 - `PUT /api/settings` - Update settings
 
@@ -76,3 +89,4 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Curr
 - Pakistani Rupees (Rs) for currency
 - Show types: Corporate, Private, Public, University
 - Organization name tracked for Corporate and University shows
+- All "Founder" references replaced with "Haider Jamil" (name) / "Admin" (role)
