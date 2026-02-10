@@ -28,7 +28,9 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - Paid/Unpaid filter on shows list
 - Show expenses tracking with add/delete
 - Band member assignment per show from settings-defined members with automated payment calculations
+- **Manual amount override**: Each member in band section can have their calculated amount manually overridden via "Custom amount" checkbox
 - **Dynamic per-member payment configs**: Each band member has configurable payment type (fixed/percentage), normal rate, referral rate, min logic with threshold and flat rate
+- **Payment config dialog shows all upcoming shows**: When saving payment config, dialog lists ALL upcoming shows (not just assigned ones) with "Assigned"/"Not Added" badges; selecting unassigned shows auto-adds the member
 - Financials page: Per-member earnings breakdown with date range filtering
   - Dynamic member selector from API (not hardcoded)
   - Shows Performed: Only past/completed shows the member participated in

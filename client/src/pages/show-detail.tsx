@@ -63,6 +63,8 @@ interface MemberFormRow {
   paymentType: "percentage" | "fixed";
   paymentValue: number;
   isReferrer: boolean;
+  manualOverride: boolean;
+  manualAmount: number;
 }
 
 interface MemberPayoutConfig {
@@ -244,6 +246,8 @@ export default function ShowDetail() {
       paymentType,
       paymentValue,
       isReferrer: false,
+      manualOverride: false,
+      manualAmount: 0,
     };
 
     setMemberRows((prev) => [...prev, newRow]);
@@ -272,6 +276,7 @@ export default function ShowDetail() {
   };
 
   const getFormRowCalc = (row: MemberFormRow): number => {
+    if (row.manualOverride) return row.manualAmount;
     const config = bandMemberConfigMap[row.name];
     return calculateDynamicPayout(config, row.paymentValue, row.isReferrer, show?.totalAmount || 0, netAmount, totalExpenses, row.paymentType);
   };
@@ -279,6 +284,20 @@ export default function ShowDetail() {
   const handleSaveMembers = () => {
     const membersData = memberRows.map((m) => {
       const config = bandMemberConfigMap[m.name];
+      if (m.manualOverride) {
+        return {
+          name: m.name,
+          role: m.role,
+          paymentType: "fixed" as const,
+          paymentValue: m.manualAmount,
+          isReferrer: m.isReferrer,
+          calculatedAmount: m.manualAmount,
+          referralRate: null,
+          hasMinLogic: false,
+          minThreshold: null,
+          minFlatRate: null,
+        };
+      }
       return {
         name: m.name,
         role: m.role,
@@ -303,6 +322,8 @@ export default function ShowDetail() {
         paymentType: m.paymentType as MemberFormRow["paymentType"],
         paymentValue: m.paymentValue,
         isReferrer: m.isReferrer,
+        manualOverride: false,
+        manualAmount: m.calculatedAmount,
       })));
     }
     setShowMemberForm(true);
@@ -690,7 +711,7 @@ export default function ShowDetail() {
                         </Button>
                       </div>
 
-                      {hasReferralOption && (
+                      {hasReferralOption && !row.manualOverride && (
                         <div className="flex items-center gap-2">
                           <Checkbox
                             checked={row.isReferrer}
@@ -703,18 +724,51 @@ export default function ShowDetail() {
                         </div>
                       )}
 
-                      {hasMinLogicActive && !row.isReferrer && (show?.totalAmount || 0) < (config.minThreshold ?? 0) && (
+                      {!row.manualOverride && hasMinLogicActive && !row.isReferrer && (show?.totalAmount || 0) < (config.minThreshold ?? 0) && (
                         <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
                           Show under Rs {(config.minThreshold ?? 0).toLocaleString()}: Base Rs {(config.minFlatRate ?? 0).toLocaleString()}
                           {totalExpenses > 0 && ` minus ${row.paymentValue}% of expenses (Rs ${Math.round((row.paymentValue / 100) * totalExpenses).toLocaleString()})`}
                         </p>
                       )}
 
-                      <p className="text-xs text-muted-foreground">
-                        Calculated: <span className="font-semibold text-foreground">
-                          Rs {getFormRowCalc(row).toLocaleString()}
-                        </span>
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={row.manualOverride}
+                          onCheckedChange={(checked) => {
+                            const isChecked = !!checked;
+                            setMemberRows((prev) => {
+                              const updated = [...prev];
+                              updated[idx] = { ...updated[idx], manualOverride: isChecked };
+                              if (isChecked) {
+                                const calcAmount = getFormRowCalc({ ...updated[idx], manualOverride: false });
+                                updated[idx].manualAmount = calcAmount;
+                              }
+                              return updated;
+                            });
+                          }}
+                          data-testid={`checkbox-manual-override-${idx}`}
+                        />
+                        <label className="text-xs text-muted-foreground">Custom amount</label>
+                      </div>
+
+                      {row.manualOverride ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Rs</span>
+                          <Input
+                            type="number"
+                            value={row.manualAmount}
+                            onChange={(e) => handleMemberChange(idx, "manualAmount", Number(e.target.value) || 0)}
+                            className="w-32"
+                            data-testid={`input-manual-amount-${idx}`}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Calculated: <span className="font-semibold text-foreground">
+                            Rs {getFormRowCalc(row).toLocaleString()}
+                          </span>
+                        </p>
+                      )}
                     </div>
                     );
                   })}

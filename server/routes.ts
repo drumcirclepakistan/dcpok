@@ -713,17 +713,16 @@ export async function registerRoutes(
       for (const show of upcomingShows) {
         const showMems = await storage.getShowMembers(show.id);
         const assigned = showMems.find((sm) => sm.name === member.name);
-        if (assigned) {
-          result.push({
-            showId: show.id,
-            title: show.title,
-            showDate: show.showDate,
-            city: show.city,
-            totalAmount: show.totalAmount,
-            memberPaymentType: assigned.paymentType,
-            memberPaymentValue: assigned.paymentValue,
-          });
-        }
+        result.push({
+          showId: show.id,
+          title: show.title,
+          showDate: show.showDate,
+          city: show.city,
+          totalAmount: show.totalAmount,
+          isAssigned: !!assigned,
+          memberPaymentType: assigned?.paymentType ?? null,
+          memberPaymentValue: assigned?.paymentValue ?? null,
+        });
       }
 
       result.sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime());
@@ -757,6 +756,20 @@ export async function registerRoutes(
               minThreshold: updated.minThreshold,
               minFlatRate: updated.minFlatRate,
             } as any);
+          } else {
+            await storage.createMember({
+              showId,
+              name: updated.name,
+              role,
+              paymentType,
+              paymentValue: normalRate,
+              isReferrer: false,
+              calculatedAmount: 0,
+              referralRate: updated.referralRate,
+              hasMinLogic: updated.hasMinLogic ?? false,
+              minThreshold: updated.minThreshold,
+              minFlatRate: updated.minFlatRate,
+            });
           }
         }
       }

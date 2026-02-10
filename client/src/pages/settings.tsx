@@ -53,8 +53,9 @@ interface UpcomingShowForMember {
   showDate: string;
   city: string;
   totalAmount: number;
-  memberPaymentType: string;
-  memberPaymentValue: number;
+  isAssigned: boolean;
+  memberPaymentType: string | null;
+  memberPaymentValue: number | null;
 }
 
 interface BandMember {
@@ -1110,7 +1111,7 @@ export default function SettingsPage() {
           <DialogHeader>
             <DialogTitle>Apply to Upcoming Shows?</DialogTitle>
             <DialogDescription>
-              This member is assigned to {upcomingShows.length} upcoming show(s). Select which shows should also get the new payment config. Unselected shows will keep their current settings.
+              Select upcoming shows to apply the new payment config. If the member isn't yet added to a show, they will be added automatically with this config.
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-2 py-2">
@@ -1127,7 +1128,14 @@ export default function SettingsPage() {
                   data-testid={`checkbox-show-${show.showId}`}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{show.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium truncate">{show.title}</p>
+                    {show.isAssigned ? (
+                      <Badge variant="secondary" className="text-[10px]">Assigned</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px]">Not Added</Badge>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
@@ -1139,9 +1147,11 @@ export default function SettingsPage() {
                     </span>
                     <span>Rs {show.totalAmount.toLocaleString()}</span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    Current: {show.memberPaymentType === "percentage" ? `${show.memberPaymentValue}%` : `Rs ${show.memberPaymentValue.toLocaleString()}`}
-                  </p>
+                  {show.isAssigned && show.memberPaymentType && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Current: {show.memberPaymentType === "percentage" ? `${show.memberPaymentValue}%` : `Rs ${(show.memberPaymentValue ?? 0).toLocaleString()}`}
+                    </p>
+                  )}
                 </div>
               </label>
             ))}
