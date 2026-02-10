@@ -28,6 +28,13 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - Show expenses tracking with add/delete
 - Band member assignment per show with automated payment calculations
 - Financials page: Per-member earnings breakdown with date range filtering
+  - Shows Performed: Only past/completed shows the member participated in
+  - Upcoming Shows: Future shows the member is assigned to
+  - Total Earnings: Only from paid completed shows
+  - Unpaid Amount: Completed shows not yet paid to the band
+  - Pending Amount: Expected earnings from upcoming shows
+  - Cities Performed In: Only counts past shows
+  - Payment Summary: Paid/Unpaid/Upcoming show counts
 - Configurable payment settings (applies to future shows only)
 - Band member management: Add/remove members, assign roles (Session Player, Manager, Custom)
 - Member account provisioning: Create login accounts, reset passwords, remove access

@@ -504,9 +504,11 @@ export async function registerRoutes(
         isPaid: boolean;
       }
 
-      const showDetails: ShowDetail[] = [];
+      const now = new Date();
+      const pastShows: ShowDetail[] = [];
+      const upcomingShows: ShowDetail[] = [];
       let totalEarnings = 0;
-      let totalShowsParticipated = 0;
+      let totalShowsPerformed = 0;
       const citySet: Record<string, number> = {};
 
       for (const show of filteredShows) {
@@ -519,7 +521,6 @@ export async function registerRoutes(
         let participated = false;
 
         if (member === "Haider Jamil") {
-          // Haider gets remainder after expenses and all member payouts
           let totalMemberPayouts = 0;
           for (const m of members) {
             if (m.name === "Zain Shahid" && m.paymentType === "percentage") {
@@ -533,7 +534,6 @@ export async function registerRoutes(
           memberEarning = net - totalMemberPayouts;
           participated = true;
         } else {
-          // Find specific member in show
           const found = members.find((m) => m.name === member);
           if (found) {
             participated = true;
@@ -548,10 +548,9 @@ export async function registerRoutes(
         }
 
         if (participated) {
-          totalShowsParticipated++;
-          totalEarnings += memberEarning;
-          citySet[show.city] = (citySet[show.city] || 0) + 1;
-          showDetails.push({
+          const showDate = new Date(show.showDate);
+          const isUpcoming = showDate > now;
+          const detail: ShowDetail = {
             id: show.id,
             title: show.title,
             city: show.city,
@@ -560,7 +559,18 @@ export async function registerRoutes(
             totalAmount: show.totalAmount,
             memberEarning,
             isPaid: show.isPaid,
-          });
+          };
+
+          if (isUpcoming) {
+            upcomingShows.push(detail);
+          } else {
+            pastShows.push(detail);
+            totalShowsPerformed++;
+            if (show.isPaid) {
+              totalEarnings += memberEarning;
+            }
+            citySet[show.city] = (citySet[show.city] || 0) + 1;
+          }
         }
       }
 
@@ -568,22 +578,27 @@ export async function registerRoutes(
         .sort((a, b) => b[1] - a[1])
         .map(([city, count]) => ({ city, count }));
 
-      const avgPerShow = totalShowsParticipated > 0 ? Math.round(totalEarnings / totalShowsParticipated) : 0;
+      const avgPerShow = totalShowsPerformed > 0 ? Math.round(totalEarnings / totalShowsPerformed) : 0;
 
-      const paidShows = showDetails.filter((s) => s.isPaid).length;
-      const unpaidShows = showDetails.filter((s) => !s.isPaid).length;
-      const unpaidAmount = showDetails.filter((s) => !s.isPaid).reduce((s, sh) => s + sh.memberEarning, 0);
+      const paidShows = pastShows.filter((s) => s.isPaid).length;
+      const unpaidPastShows = pastShows.filter((s) => !s.isPaid);
+      const unpaidShows = unpaidPastShows.length;
+      const unpaidAmount = unpaidPastShows.reduce((s, sh) => s + sh.memberEarning, 0);
+      const pendingAmount = upcomingShows.reduce((s, sh) => s + sh.memberEarning, 0);
 
       res.json({
         member: member || "Haider Jamil",
         totalEarnings,
-        totalShows: totalShowsParticipated,
+        totalShows: totalShowsPerformed,
         avgPerShow,
         paidShows,
         unpaidShows,
         unpaidAmount,
+        pendingAmount,
+        upcomingShowsCount: upcomingShows.length,
         cities,
-        shows: showDetails.sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()),
+        shows: pastShows.sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()),
+        upcomingShows: upcomingShows.sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime()),
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to compute financials" });

@@ -46,8 +46,11 @@ interface FinancialStats {
   paidShows: number;
   unpaidShows: number;
   unpaidAmount: number;
+  pendingAmount: number;
+  upcomingShowsCount: number;
   cities: { city: string; count: number }[];
   shows: FinancialShow[];
+  upcomingShows: FinancialShow[];
 }
 
 const members = ["Haider Jamil", "Zain Shahid", "Wahab", "Hassan"];
@@ -213,18 +216,23 @@ export default function FinancialsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             <Card>
               <CardContent className="pt-5 pb-5">
-                <p className="text-xs text-muted-foreground">Total Earnings</p>
+                <p className="text-xs text-muted-foreground">Total Earnings (Paid)</p>
                 <p className="text-xl font-bold mt-1 text-primary" data-testid="stat-total-earnings">
                   Rs {(stats?.totalEarnings || 0).toLocaleString()}
                 </p>
+                {(stats?.paidShows || 0) > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    from {stats?.paidShows} paid show{stats?.paidShows !== 1 ? "s" : ""}
+                  </p>
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-5 pb-5">
-                <p className="text-xs text-muted-foreground">Shows</p>
+                <p className="text-xs text-muted-foreground">Shows Performed</p>
                 <p className="text-xl font-bold mt-1" data-testid="stat-total-shows-financial">
                   {stats?.totalShows || 0}
                 </p>
@@ -246,7 +254,20 @@ export default function FinancialsPage() {
                 </p>
                 {(stats?.unpaidShows || 0) > 0 && (
                   <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {stats?.unpaidShows} unpaid show{stats?.unpaidShows !== 1 ? "s" : ""}
+                    {stats?.unpaidShows} completed show{stats?.unpaidShows !== 1 ? "s" : ""} not yet paid
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-5">
+                <p className="text-xs text-muted-foreground">Pending Amount</p>
+                <p className="text-xl font-bold mt-1" data-testid="stat-pending-amount">
+                  Rs {(stats?.pendingAmount || 0).toLocaleString()}
+                </p>
+                {(stats?.upcomingShowsCount || 0) > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {stats?.upcomingShowsCount} upcoming show{stats?.upcomingShowsCount !== 1 ? "s" : ""}
                   </p>
                 )}
               </CardContent>
@@ -288,21 +309,28 @@ export default function FinancialsPage() {
                 </h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-muted-foreground">Paid shows</span>
+                    <span className="text-sm text-muted-foreground">Paid (completed)</span>
                     <div className="flex items-center gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
                       <span className="text-sm font-semibold" data-testid="text-paid-shows-count">{stats?.paidShows || 0}</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-muted-foreground">Unpaid shows</span>
+                    <span className="text-sm text-muted-foreground">Unpaid (completed)</span>
                     <div className="flex items-center gap-1.5">
                       <AlertCircle className="w-3.5 h-3.5 text-destructive" />
                       <span className="text-sm font-semibold" data-testid="text-unpaid-shows-count">{stats?.unpaidShows || 0}</span>
                     </div>
                   </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-muted-foreground">Upcoming</span>
+                    <div className="flex items-center gap-1.5">
+                      <CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-sm font-semibold" data-testid="text-upcoming-shows-count">{stats?.upcomingShowsCount || 0}</span>
+                    </div>
+                  </div>
                   <div className="border-t pt-2 flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">Total earnings</span>
+                    <span className="text-sm font-medium">Total earned (paid)</span>
                     <span className="text-sm font-bold text-primary">Rs {(stats?.totalEarnings || 0).toLocaleString()}</span>
                   </div>
                 </div>
@@ -310,10 +338,57 @@ export default function FinancialsPage() {
             </Card>
           </div>
 
+          {(stats?.upcomingShows?.length || 0) > 0 && (
+            <div>
+              <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+                Upcoming Shows ({stats?.upcomingShows?.length || 0})
+              </h2>
+              <div className="space-y-2">
+                {stats?.upcomingShows.map((show) => (
+                  <Link key={show.id} href={`/shows/${show.id}`}>
+                    <Card className="hover-elevate cursor-pointer" data-testid={`financial-upcoming-show-${show.id}`}>
+                      <CardContent className="pt-4 pb-4">
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium text-sm">{show.title}</p>
+                              <Badge variant={showTypeBadgeVariant(show.showType) as any} className="text-[10px]">
+                                {show.showType}
+                              </Badge>
+                              <Badge variant="outline" className="text-[10px]">
+                                <CalendarIcon className="w-2.5 h-2.5 mr-0.5" />
+                                Upcoming
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <span className="text-xs text-muted-foreground">{show.city}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(show.showDate), "MMM d, yyyy")}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <span className="text-sm font-bold text-muted-foreground" data-testid={`financial-upcoming-earning-${show.id}`}>
+                              Rs {show.memberEarning.toLocaleString()}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              of Rs {show.totalAmount.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
               <Music className="w-4 h-4 text-muted-foreground" />
-              Shows ({stats?.shows?.length || 0})
+              Shows Performed ({stats?.shows?.length || 0})
             </h2>
             {(stats?.shows?.length || 0) === 0 ? (
               <Card>
@@ -321,8 +396,8 @@ export default function FinancialsPage() {
                   <Music className="w-10 h-10 text-muted-foreground mb-3" />
                   <p className="text-sm text-muted-foreground" data-testid="text-no-financial-shows">
                     {selectedMember === "Haider Jamil"
-                      ? "No shows in the selected period"
-                      : `${selectedMember} has no shows in the selected period`}
+                      ? "No shows performed in the selected period"
+                      : `${selectedMember} has no shows performed in the selected period`}
                   </p>
                 </CardContent>
               </Card>
