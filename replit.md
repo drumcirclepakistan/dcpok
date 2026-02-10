@@ -43,6 +43,7 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - Band member management: Add/remove members, assign roles (Session Player, Manager, Custom)
 - Member account provisioning: Create login accounts, reset passwords, remove access
 - **Collapsible settings sections**: Payment Configs, Band Members, Show Types
+- **Directory**: Full-text search across all show data (title, city, organization, contact details, notes), date range filtering, summary stats (total/completed/upcoming/paid/unpaid/revenue), show type breakdown, organization grouping with expandable show lists, and one-click contact details dialog
 - Dark mode toggle
 - Responsive sidebar navigation
 
