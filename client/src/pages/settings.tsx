@@ -30,12 +30,32 @@ import {
 } from "@/components/ui/collapsible";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Settings as SettingsIcon, Save, Loader2, Percent, DollarSign,
   Users, UserPlus, Shield, KeyRound, Trash2, UserCheck, UserX,
-  ChevronDown, ChevronRight, Tag, Plus, Pencil, X,
+  ChevronDown, ChevronRight, Tag, Plus, Pencil, X, Calendar, MapPin,
 } from "lucide-react";
+import { format } from "date-fns";
 import { useState } from "react";
+
+interface UpcomingShowForMember {
+  showId: string;
+  title: string;
+  showDate: string;
+  city: string;
+  totalAmount: number;
+  memberPaymentType: string;
+  memberPaymentValue: number;
+}
 
 interface BandMember {
   id: string;
@@ -139,13 +159,29 @@ export default function SettingsPage() {
     minFlatRate: "",
   });
 
+  const [showUpcomingDialog, setShowUpcomingDialog] = useState(false);
+  const [upcomingShows, setUpcomingShows] = useState<UpcomingShowForMember[]>([]);
+  const [selectedShowIds, setSelectedShowIds] = useState<Set<string>>(new Set());
+  const [pendingSaveMemberId, setPendingSaveMemberId] = useState<string | null>(null);
+  const [loadingUpcoming, setLoadingUpcoming] = useState(false);
+
   const updatePaymentMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) =>
       apiRequest("PATCH", `/api/band-members/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/band-members"] });
       setEditingPaymentId(null);
-      toast({ title: "Payment config saved", description: "Changes apply to future shows only." });
+      setShowUpcomingDialog(false);
+      setPendingSaveMemberId(null);
+      setUpcomingShows([]);
+      setSelectedShowIds(new Set());
+      const appliedCount = selectedShowIds.size;
+      toast({
+        title: "Payment config saved",
+        description: appliedCount > 0
+          ? `Updated ${appliedCount} upcoming show(s) as well.`
+          : "Changes will apply to new shows only.",
+      });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -164,17 +200,53 @@ export default function SettingsPage() {
     });
   };
 
-  const savePaymentConfig = (memberId: string) => {
-    updatePaymentMutation.mutate({
-      id: memberId,
-      data: {
-        paymentType: paymentForm.paymentType,
-        normalRate: paymentForm.normalRate ? Number(paymentForm.normalRate) : null,
-        referralRate: paymentForm.referralRate ? Number(paymentForm.referralRate) : null,
-        hasMinLogic: paymentForm.hasMinLogic,
-        minThreshold: paymentForm.minThreshold ? Number(paymentForm.minThreshold) : null,
-        minFlatRate: paymentForm.minFlatRate ? Number(paymentForm.minFlatRate) : null,
-      },
+  const getPaymentData = () => ({
+    paymentType: paymentForm.paymentType,
+    normalRate: paymentForm.normalRate ? Number(paymentForm.normalRate) : null,
+    referralRate: paymentForm.referralRate ? Number(paymentForm.referralRate) : null,
+    hasMinLogic: paymentForm.hasMinLogic,
+    minThreshold: paymentForm.minThreshold ? Number(paymentForm.minThreshold) : null,
+    minFlatRate: paymentForm.minFlatRate ? Number(paymentForm.minFlatRate) : null,
+  });
+
+  const savePaymentConfig = async (memberId: string) => {
+    setLoadingUpcoming(true);
+    setPendingSaveMemberId(memberId);
+    try {
+      const res = await fetch(`/api/band-members/${memberId}/upcoming-shows`, { credentials: "include" });
+      const data: UpcomingShowForMember[] = await res.json();
+      if (data.length > 0) {
+        setUpcomingShows(data);
+        setSelectedShowIds(new Set());
+        setShowUpcomingDialog(true);
+      } else {
+        updatePaymentMutation.mutate({ id: memberId, data: getPaymentData() });
+      }
+    } catch {
+      updatePaymentMutation.mutate({ id: memberId, data: getPaymentData() });
+    } finally {
+      setLoadingUpcoming(false);
+    }
+  };
+
+  const confirmPaymentSave = () => {
+    if (!pendingSaveMemberId) return;
+    const data = {
+      ...getPaymentData(),
+      applyToShowIds: Array.from(selectedShowIds),
+    };
+    updatePaymentMutation.mutate({ id: pendingSaveMemberId, data });
+  };
+
+  const toggleShowSelection = (showId: string) => {
+    setSelectedShowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(showId)) {
+        next.delete(showId);
+      } else {
+        next.add(showId);
+      }
+      return next;
     });
   };
 
@@ -498,10 +570,10 @@ export default function SettingsPage() {
                     <Button
                       size="sm"
                       onClick={() => savePaymentConfig(member.id)}
-                      disabled={updatePaymentMutation.isPending}
+                      disabled={updatePaymentMutation.isPending || loadingUpcoming}
                       data-testid={`button-save-payment-${member.id}`}
                     >
-                      {updatePaymentMutation.isPending ? (
+                      {(updatePaymentMutation.isPending || loadingUpcoming) ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
                       ) : (
                         <><Save className="w-3 h-3 mr-1" />Save</>
@@ -1027,6 +1099,82 @@ export default function SettingsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={showUpcomingDialog} onOpenChange={(open) => {
+        if (!open && !updatePaymentMutation.isPending) {
+          setShowUpcomingDialog(false);
+          setPendingSaveMemberId(null);
+        }
+      }}>
+        <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Apply to Upcoming Shows?</DialogTitle>
+            <DialogDescription>
+              This member is assigned to {upcomingShows.length} upcoming show(s). Select which shows should also get the new payment config. Unselected shows will keep their current settings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-2 py-2">
+            {upcomingShows.map((show) => (
+              <label
+                key={show.showId}
+                className="flex items-start gap-3 p-3 border rounded-md cursor-pointer hover-elevate"
+                data-testid={`upcoming-show-${show.showId}`}
+              >
+                <Checkbox
+                  checked={selectedShowIds.has(show.showId)}
+                  onCheckedChange={() => toggleShowSelection(show.showId)}
+                  className="mt-0.5"
+                  data-testid={`checkbox-show-${show.showId}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{show.title}</p>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {format(new Date(show.showDate), "MMM d, yyyy")}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {show.city}
+                    </span>
+                    <span>Rs {show.totalAmount.toLocaleString()}</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Current: {show.memberPaymentType === "percentage" ? `${show.memberPaymentValue}%` : `Rs ${show.memberPaymentValue.toLocaleString()}`}
+                  </p>
+                </div>
+              </label>
+            ))}
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              onClick={confirmPaymentSave}
+              disabled={updatePaymentMutation.isPending}
+              className="w-full"
+              data-testid="button-confirm-apply-shows"
+            >
+              {updatePaymentMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : null}
+              {selectedShowIds.size > 0
+                ? `Save & Update ${selectedShowIds.size} Show(s)`
+                : "Save for New Shows Only"}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setShowUpcomingDialog(false);
+                setPendingSaveMemberId(null);
+              }}
+              disabled={updatePaymentMutation.isPending}
+              className="w-full"
+              data-testid="button-cancel-apply-shows"
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -158,6 +158,12 @@ export async function registerRoutes(
     )
   `);
 
+  // Add payment config snapshot columns to show_members
+  await db.execute(sql`ALTER TABLE show_members ADD COLUMN IF NOT EXISTS referral_rate INTEGER`);
+  await db.execute(sql`ALTER TABLE show_members ADD COLUMN IF NOT EXISTS has_min_logic BOOLEAN NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE show_members ADD COLUMN IF NOT EXISTS min_threshold INTEGER`);
+  await db.execute(sql`ALTER TABLE show_members ADD COLUMN IF NOT EXISTS min_flat_rate INTEGER`);
+
   // Add payment config columns to band_members
   await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'fixed'`);
   await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS normal_rate INTEGER`);
@@ -423,21 +429,20 @@ export async function registerRoutes(
       }
 
       const calcPayout = (
-        m: { name: string; paymentType: string; paymentValue: number; isReferrer: boolean },
+        m: { name: string; paymentType: string; paymentValue: number; isReferrer: boolean; referralRate?: number | null; hasMinLogic?: boolean; minThreshold?: number | null; minFlatRate?: number | null },
         showTotal: number,
         netAmount: number,
         totalExp: number
       ): number => {
-        const config = bandMemberConfigMap[m.name];
         if (m.paymentType === "percentage") {
-          if (m.isReferrer && config?.referralRate) {
-            return Math.round((config.referralRate / 100) * netAmount);
+          if (m.isReferrer && m.referralRate) {
+            return Math.round((m.referralRate / 100) * netAmount);
           }
-          if (config?.hasMinLogic && config.minThreshold && config.minFlatRate) {
-            if (showTotal < config.minThreshold) {
-              if (totalExp === 0) return config.minFlatRate;
+          if (m.hasMinLogic && m.minThreshold && m.minFlatRate) {
+            if (showTotal < m.minThreshold) {
+              if (totalExp === 0) return m.minFlatRate;
               const deduction = Math.round((m.paymentValue / 100) * totalExp);
-              return Math.max(0, config.minFlatRate - deduction);
+              return Math.max(0, m.minFlatRate - deduction);
             }
           }
           return Math.round((m.paymentValue / 100) * netAmount);
@@ -466,9 +471,10 @@ export async function registerRoutes(
       const revenueAfterExpenses = totalRevenue - totalExpenses;
       const founderRevenue = revenueAfterExpenses - totalMemberPayouts;
 
+      const completedFilteredShows = filteredShows.filter((s) => s.status === "completed");
       const cityCount: Record<string, number> = {};
       const typeCount: Record<string, number> = {};
-      for (const show of filteredShows) {
+      for (const show of completedFilteredShows) {
         cityCount[show.city] = (cityCount[show.city] || 0) + 1;
         typeCount[show.showType] = (typeCount[show.showType] || 0) + 1;
       }
@@ -528,21 +534,20 @@ export async function registerRoutes(
       }
 
       const calculateMemberPayout = (
-        showMember: { name: string; paymentType: string; paymentValue: number; isReferrer: boolean },
+        showMember: { name: string; paymentType: string; paymentValue: number; isReferrer: boolean; referralRate?: number | null; hasMinLogic?: boolean; minThreshold?: number | null; minFlatRate?: number | null },
         showTotal: number,
         netAmount: number,
         totalExpenses: number
       ): number => {
-        const config = bandMemberConfigMap[showMember.name];
         if (showMember.paymentType === "percentage") {
-          if (showMember.isReferrer && config?.referralRate) {
-            return Math.round((config.referralRate / 100) * netAmount);
+          if (showMember.isReferrer && showMember.referralRate) {
+            return Math.round((showMember.referralRate / 100) * netAmount);
           }
-          if (config?.hasMinLogic && config.minThreshold && config.minFlatRate) {
-            if (showTotal < config.minThreshold) {
-              if (totalExpenses === 0) return config.minFlatRate;
+          if (showMember.hasMinLogic && showMember.minThreshold && showMember.minFlatRate) {
+            if (showTotal < showMember.minThreshold) {
+              if (totalExpenses === 0) return showMember.minFlatRate;
               const deduction = Math.round((showMember.paymentValue / 100) * totalExpenses);
-              return Math.max(0, config.minFlatRate - deduction);
+              return Math.max(0, showMember.minFlatRate - deduction);
             }
           }
           return Math.round((showMember.paymentValue / 100) * netAmount);
@@ -696,10 +701,66 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/band-members/:id/upcoming-shows", requireAdmin, async (req, res) => {
+    try {
+      const member = await storage.getBandMember(req.params.id as string);
+      if (!member) return res.status(404).json({ message: "Band member not found" });
+
+      const allShows = await storage.getShows(req.session.userId!);
+      const upcomingShows = allShows.filter((s) => s.status === "upcoming");
+
+      const result = [];
+      for (const show of upcomingShows) {
+        const showMems = await storage.getShowMembers(show.id);
+        const assigned = showMems.find((sm) => sm.name === member.name);
+        if (assigned) {
+          result.push({
+            showId: show.id,
+            title: show.title,
+            showDate: show.showDate,
+            city: show.city,
+            totalAmount: show.totalAmount,
+            memberPaymentType: assigned.paymentType,
+            memberPaymentValue: assigned.paymentValue,
+          });
+        }
+      }
+
+      result.sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime());
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch upcoming shows" });
+    }
+  });
+
   app.patch("/api/band-members/:id", requireAdmin, async (req, res) => {
     try {
-      const updated = await storage.updateBandMember(req.params.id as string, req.body);
+      const { applyToShowIds, ...updateData } = req.body;
+      const updated = await storage.updateBandMember(req.params.id as string, updateData);
       if (!updated) return res.status(404).json({ message: "Band member not found" });
+
+      if (applyToShowIds && Array.isArray(applyToShowIds) && applyToShowIds.length > 0) {
+        const paymentType = updated.paymentType || "fixed";
+        const normalRate = updated.normalRate ?? 0;
+        const role = updated.role === "manager" ? "manager" : "session_player";
+
+        for (const showId of applyToShowIds) {
+          const showMems = await storage.getShowMembers(showId);
+          const assigned = showMems.find((sm) => sm.name === updated.name);
+          if (assigned) {
+            await storage.updateMember(assigned.id, {
+              paymentType,
+              paymentValue: normalRate,
+              role,
+              referralRate: updated.referralRate,
+              hasMinLogic: updated.hasMinLogic,
+              minThreshold: updated.minThreshold,
+              minFlatRate: updated.minFlatRate,
+            } as any);
+          }
+        }
+      }
+
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Update failed" });

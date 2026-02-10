@@ -27,7 +27,7 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - Shows list highlights upcoming shows with no advance in orange "No Advance Received" section
 - Paid/Unpaid filter on shows list
 - Show expenses tracking with add/delete
-- Band member assignment per show with automated payment calculations
+- Band member assignment per show from settings-defined members with automated payment calculations
 - **Dynamic per-member payment configs**: Each band member has configurable payment type (fixed/percentage), normal rate, referral rate, min logic with threshold and flat rate
 - Financials page: Per-member earnings breakdown with date range filtering
   - Dynamic member selector from API (not hardcoded)
@@ -84,11 +84,12 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - `PUT /api/shows/:id/members` - Replace all members for show
 - `POST /api/shows/:id/members` - Add member
 - `DELETE /api/shows/:id/members/:memberId` - Remove member
-- `GET /api/dashboard/stats?from=&to=` - Aggregated dashboard stats with time range filter (includes noAdvanceCount)
+- `GET /api/dashboard/stats?from=&to=` - Aggregated dashboard stats with time range filter (includes noAdvanceCount, topCities/topTypes only count completed shows)
 - `GET /api/financials?member=&from=&to=` - Per-member financial stats
 - `GET /api/band-members` - List all band members (with payment configs)
 - `POST /api/band-members` - Add band member
-- `PATCH /api/band-members/:id` - Update band member (role + payment config)
+- `PATCH /api/band-members/:id` - Update band member (role + payment config, optional applyToShowIds)
+- `GET /api/band-members/:id/upcoming-shows` - Get upcoming shows where this member is assigned
 - `DELETE /api/band-members/:id` - Delete band member
 - `POST /api/band-members/:id/create-account` - Create login account for member
 - `POST /api/band-members/:id/reset-password` - Reset member password

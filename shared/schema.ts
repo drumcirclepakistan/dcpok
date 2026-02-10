@@ -99,6 +99,10 @@ export const showMembers = pgTable("show_members", {
   paymentValue: integer("payment_value").notNull(),
   isReferrer: boolean("is_referrer").notNull().default(false),
   calculatedAmount: integer("calculated_amount").notNull().default(0),
+  referralRate: integer("referral_rate"),
+  hasMinLogic: boolean("has_min_logic").notNull().default(false),
+  minThreshold: integer("min_threshold"),
+  minFlatRate: integer("min_flat_rate"),
 });
 
 export const insertMemberSchema = createInsertSchema(showMembers).omit({
@@ -107,6 +111,10 @@ export const insertMemberSchema = createInsertSchema(showMembers).omit({
   name: z.string().min(1, "Name is required"),
   paymentValue: z.coerce.number().min(0),
   calculatedAmount: z.coerce.number().min(0).optional(),
+  referralRate: z.coerce.number().min(0).optional().nullable(),
+  hasMinLogic: z.boolean().optional(),
+  minThreshold: z.coerce.number().min(0).optional().nullable(),
+  minFlatRate: z.coerce.number().min(0).optional().nullable(),
 });
 
 export type InsertMember = z.infer<typeof insertMemberSchema>;

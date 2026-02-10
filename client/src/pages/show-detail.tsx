@@ -43,33 +43,56 @@ const statusColors: Record<string, string> = {
   cancelled: "destructive",
 };
 
+interface BandMemberConfig {
+  id: string;
+  name: string;
+  role: string;
+  customRole: string | null;
+  userId: string | null;
+  paymentType: string;
+  normalRate: number | null;
+  referralRate: number | null;
+  hasMinLogic: boolean;
+  minThreshold: number | null;
+  minFlatRate: number | null;
+}
+
 interface MemberFormRow {
   name: string;
   role: "session_player" | "manager" | "other";
-  paymentType: "percentage" | "fixed" | "manual";
+  paymentType: "percentage" | "fixed";
   paymentValue: number;
   isReferrer: boolean;
 }
 
-function calculateZainPayout(
+interface MemberPayoutConfig {
+  referralRate?: number | null;
+  hasMinLogic?: boolean;
+  minThreshold?: number | null;
+  minFlatRate?: number | null;
+}
+
+function calculateDynamicPayout(
+  config: MemberPayoutConfig | undefined,
   paymentValue: number,
   isReferrer: boolean,
   showTotal: number,
   netAmount: number,
-  totalExpenses: number
+  totalExpenses: number,
+  paymentType: string
 ): number {
-  if (isReferrer) {
+  if (paymentType === "percentage") {
+    if (isReferrer && config?.referralRate) {
+      return Math.round((config.referralRate / 100) * netAmount);
+    }
+    if (config?.hasMinLogic && config.minThreshold && config.minFlatRate && showTotal < config.minThreshold) {
+      if (totalExpenses === 0) return config.minFlatRate;
+      const deduction = Math.round((paymentValue / 100) * totalExpenses);
+      return Math.max(0, config.minFlatRate - deduction);
+    }
     return Math.round((paymentValue / 100) * netAmount);
   }
-  if (showTotal < 100000) {
-    const base = 15000;
-    if (totalExpenses === 0) {
-      return base;
-    }
-    const expenseDeduction = Math.round((paymentValue / 100) * totalExpenses);
-    return Math.max(0, base - expenseDeduction);
-  }
-  return Math.round((paymentValue / 100) * netAmount);
+  return paymentValue;
 }
 
 export default function ShowDetail() {
@@ -92,9 +115,17 @@ export default function ShowDetail() {
     enabled: !!id,
   });
 
-  const { data: appSettings = {} } = useQuery<Record<string, string>>({
-    queryKey: ["/api/settings"],
+  const { data: bandMembers = [] } = useQuery<BandMemberConfig[]>({
+    queryKey: ["/api/band-members"],
   });
+
+  const bandMemberConfigMap = useMemo(() => {
+    const map: Record<string, BandMemberConfig> = {};
+    for (const bm of bandMembers) {
+      map[bm.name] = bm;
+    }
+    return map;
+  }, [bandMembers]);
 
   const [newExpenseDesc, setNewExpenseDesc] = useState("");
   const [newExpenseAmount, setNewExpenseAmount] = useState("");
@@ -170,16 +201,13 @@ export default function ShowDetail() {
 
   const calculatedMembers = useMemo(() => {
     return members.map((m) => {
-      let calc = m.calculatedAmount;
-      if (m.name === "Zain Shahid" && m.paymentType === "percentage") {
-        calc = calculateZainPayout(m.paymentValue, m.isReferrer, show?.totalAmount || 0, netAmount, totalExpenses);
-      } else if (m.paymentType === "percentage") {
-        calc = Math.round((m.paymentValue / 100) * netAmount);
-      } else if (m.paymentType === "fixed") {
-        calc = m.paymentValue;
-      } else {
-        calc = m.paymentValue;
-      }
+      const snapshotConfig: MemberPayoutConfig = {
+        referralRate: m.referralRate,
+        hasMinLogic: m.hasMinLogic,
+        minThreshold: m.minThreshold,
+        minFlatRate: m.minFlatRate,
+      };
+      const calc = calculateDynamicPayout(snapshotConfig, m.paymentValue, m.isReferrer, show?.totalAmount || 0, netAmount, totalExpenses, m.paymentType);
       return { ...m, calculatedAmount: calc };
     });
   }, [members, netAmount, totalExpenses, show?.totalAmount]);
@@ -195,29 +223,30 @@ export default function ShowDetail() {
     });
   };
 
-  const handleAddMemberPreset = (preset: string) => {
-    const sessionPercent = Number(appSettings.session_player_percentage || "15");
-    const referralPercent = Number(appSettings.referral_percentage || "33");
-    const wahabFixed = Number(appSettings.wahab_fixed_rate || "15000");
-    const managerRate = Number(appSettings.manager_default_rate || "3000");
+  const handleAddMemberPreset = (memberId: string) => {
+    const config = bandMembers.find((bm) => bm.id === memberId);
+    if (!config) return;
 
-    let newRow: MemberFormRow | null = null;
-
-    if (preset === "zain") {
-      newRow = { name: "Zain Shahid", role: "session_player", paymentType: "percentage", paymentValue: sessionPercent, isReferrer: false };
-    } else if (preset === "wahab") {
-      newRow = { name: "Wahab", role: "session_player", paymentType: "fixed", paymentValue: wahabFixed, isReferrer: false };
-    } else if (preset === "hassan") {
-      newRow = { name: "Hassan", role: "manager", paymentType: "fixed", paymentValue: managerRate, isReferrer: false };
-    } else if (preset === "other_player") {
-      newRow = { name: "", role: "session_player", paymentType: "manual", paymentValue: 0, isReferrer: false };
-    } else if (preset === "other_manager") {
-      newRow = { name: "", role: "manager", paymentType: "manual", paymentValue: 0, isReferrer: false };
+    const alreadyAdded = memberRows.some((r) => r.name === config.name);
+    if (alreadyAdded) {
+      toast({ title: "Already added", description: `${config.name} is already in the list`, variant: "destructive" });
+      setMemberPreset("");
+      return;
     }
 
-    if (newRow) {
-      setMemberRows((prev) => [...prev, newRow!]);
-    }
+    const role = (config.role === "manager" ? "manager" : "session_player") as MemberFormRow["role"];
+    const paymentType = (config.paymentType === "percentage" ? "percentage" : "fixed") as MemberFormRow["paymentType"];
+    const paymentValue = config.normalRate ?? 0;
+
+    const newRow: MemberFormRow = {
+      name: config.name,
+      role,
+      paymentType,
+      paymentValue,
+      isReferrer: false,
+    };
+
+    setMemberRows((prev) => [...prev, newRow]);
     setMemberPreset("");
   };
 
@@ -225,11 +254,14 @@ export default function ShowDetail() {
     setMemberRows((prev) => {
       const updated = [...prev];
       updated[idx] = { ...updated[idx], [field]: value };
-      if (field === "isReferrer" && value === true && updated[idx].name === "Zain Shahid") {
-        updated[idx].paymentValue = Number(appSettings.referral_percentage || "33");
-      }
-      if (field === "isReferrer" && value === false && updated[idx].name === "Zain Shahid") {
-        updated[idx].paymentValue = Number(appSettings.session_player_percentage || "15");
+      const config = bandMemberConfigMap[updated[idx].name];
+      if (field === "isReferrer" && config) {
+        if (value === true && config.referralRate) {
+          updated[idx].paymentValue = config.referralRate;
+        }
+        if (value === false) {
+          updated[idx].paymentValue = config.normalRate ?? 0;
+        }
       }
       return updated;
     });
@@ -240,24 +272,26 @@ export default function ShowDetail() {
   };
 
   const getFormRowCalc = (row: MemberFormRow): number => {
-    if (row.name === "Zain Shahid" && row.paymentType === "percentage") {
-      return calculateZainPayout(row.paymentValue, row.isReferrer, show?.totalAmount || 0, netAmount, totalExpenses);
-    }
-    if (row.paymentType === "percentage") {
-      return Math.round((row.paymentValue / 100) * netAmount);
-    }
-    return row.paymentValue;
+    const config = bandMemberConfigMap[row.name];
+    return calculateDynamicPayout(config, row.paymentValue, row.isReferrer, show?.totalAmount || 0, netAmount, totalExpenses, row.paymentType);
   };
 
   const handleSaveMembers = () => {
-    const membersData = memberRows.map((m) => ({
-      name: m.name,
-      role: m.role,
-      paymentType: m.paymentType,
-      paymentValue: m.paymentValue,
-      isReferrer: m.isReferrer,
-      calculatedAmount: getFormRowCalc(m),
-    }));
+    const membersData = memberRows.map((m) => {
+      const config = bandMemberConfigMap[m.name];
+      return {
+        name: m.name,
+        role: m.role,
+        paymentType: m.paymentType,
+        paymentValue: m.paymentValue,
+        isReferrer: m.isReferrer,
+        calculatedAmount: getFormRowCalc(m),
+        referralRate: config?.referralRate ?? null,
+        hasMinLogic: config?.hasMinLogic ?? false,
+        minThreshold: config?.minThreshold ?? null,
+        minFlatRate: config?.minFlatRate ?? null,
+      };
+    });
     saveMembersMutation.mutate({ members: membersData });
   };
 
@@ -601,14 +635,16 @@ export default function ShowDetail() {
                     </p>
                   )}
 
-                  {calculatedMembers.map((m) => (
+                  {calculatedMembers.map((m) => {
+                    const showMinRule = m.hasMinLogic && m.minThreshold && !m.isReferrer && (show?.totalAmount || 0) < m.minThreshold;
+                    return (
                     <div key={m.id} className="py-3 border-b last:border-b-0 flex items-center justify-between gap-3" data-testid={`member-row-${m.id}`}>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-medium">{m.name}</p>
                           {m.isReferrer && <Badge variant="secondary" className="text-[10px]">Referred</Badge>}
-                          {m.name === "Zain Shahid" && !m.isReferrer && (show?.totalAmount || 0) < 100000 && (
-                            <Badge variant="outline" className="text-[10px]">Min 15K rule</Badge>
+                          {showMinRule && (
+                            <Badge variant="outline" className="text-[10px]">Min Rs {(m.minFlatRate ?? 0).toLocaleString()} rule</Badge>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground capitalize">
@@ -621,7 +657,8 @@ export default function ShowDetail() {
                         Rs {m.calculatedAmount.toLocaleString()}
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
 
@@ -635,41 +672,25 @@ export default function ShowDetail() {
                     <Badge variant="outline">Admin</Badge>
                   </div>
 
-                  {memberRows.map((row, idx) => (
+                  {memberRows.map((row, idx) => {
+                    const config = bandMemberConfigMap[row.name];
+                    const hasReferralOption = config?.paymentType === "percentage" && config?.referralRate;
+                    const hasMinLogicActive = config?.hasMinLogic && config?.minThreshold && config?.minFlatRate;
+                    return (
                     <div key={idx} className="p-3 border rounded-md space-y-3" data-testid={`member-form-row-${idx}`}>
                       <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          {row.role === "session_player" ? "Session Player" : row.role === "manager" ? "Manager" : "Other"}
-                        </p>
+                        <div>
+                          <p className="text-sm font-medium">{row.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {row.role.replace("_", " ")} &middot; {row.paymentType === "percentage" ? `${row.paymentValue}% of net` : `Rs ${row.paymentValue.toLocaleString()} fixed`}
+                          </p>
+                        </div>
                         <Button size="icon" variant="ghost" onClick={() => handleRemoveMemberRow(idx)} data-testid={`button-remove-member-${idx}`}>
                           <X className="w-3.5 h-3.5" />
                         </Button>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">Name</label>
-                          <Input
-                            value={row.name}
-                            onChange={(e) => handleMemberChange(idx, "name", e.target.value)}
-                            placeholder="Member name"
-                            data-testid={`input-member-name-${idx}`}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">
-                            {row.paymentType === "percentage" ? "Percentage (%)" : "Amount (Rs)"}
-                          </label>
-                          <Input
-                            type="number"
-                            value={row.paymentValue}
-                            onChange={(e) => handleMemberChange(idx, "paymentValue", Number(e.target.value))}
-                            data-testid={`input-member-value-${idx}`}
-                          />
-                        </div>
-                      </div>
-
-                      {row.name === "Zain Shahid" && (
+                      {hasReferralOption && (
                         <div className="flex items-center gap-2">
                           <Checkbox
                             checked={row.isReferrer}
@@ -677,14 +698,14 @@ export default function ShowDetail() {
                             data-testid={`checkbox-referrer-${idx}`}
                           />
                           <label className="text-xs text-muted-foreground">
-                            Referred show (gets {appSettings.referral_percentage || "33"}% instead of {appSettings.session_player_percentage || "15"}%)
+                            Referred show (gets {config.referralRate}% instead of {config.normalRate}%)
                           </label>
                         </div>
                       )}
 
-                      {row.name === "Zain Shahid" && !row.isReferrer && (show?.totalAmount || 0) < 100000 && (
+                      {hasMinLogicActive && !row.isReferrer && (show?.totalAmount || 0) < (config.minThreshold ?? 0) && (
                         <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
-                          Show under Rs 100K: Base Rs 15,000
+                          Show under Rs {(config.minThreshold ?? 0).toLocaleString()}: Base Rs {(config.minFlatRate ?? 0).toLocaleString()}
                           {totalExpenses > 0 && ` minus ${row.paymentValue}% of expenses (Rs ${Math.round((row.paymentValue / 100) * totalExpenses).toLocaleString()})`}
                         </p>
                       )}
@@ -695,7 +716,8 @@ export default function ShowDetail() {
                         </span>
                       </p>
                     </div>
-                  ))}
+                    );
+                  })}
 
                   <div className="flex items-end gap-2 flex-wrap">
                     <div className="flex-1 min-w-[160px]">
@@ -705,11 +727,16 @@ export default function ShowDetail() {
                           <SelectValue placeholder="Select member..." />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="zain">Zain Shahid (Session Player)</SelectItem>
-                          <SelectItem value="wahab">Wahab (Session Player)</SelectItem>
-                          <SelectItem value="hassan">Hassan (Manager)</SelectItem>
-                          <SelectItem value="other_player">Other Session Player</SelectItem>
-                          <SelectItem value="other_manager">Other Manager</SelectItem>
+                          {bandMembers
+                            .filter((bm) => !memberRows.some((r) => r.name === bm.name))
+                            .map((bm) => (
+                              <SelectItem key={bm.id} value={bm.id}>
+                                {bm.name} ({bm.role === "manager" ? "Manager" : "Session Player"})
+                              </SelectItem>
+                            ))}
+                          {bandMembers.filter((bm) => !memberRows.some((r) => r.name === bm.name)).length === 0 && (
+                            <SelectItem value="_none" disabled>All members added</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -763,7 +790,9 @@ export default function ShowDetail() {
 
                 <Separator />
 
-                {calculatedMembers.map((m) => (
+                {calculatedMembers.map((m) => {
+                  const showMinRule = m.hasMinLogic && m.minThreshold && !m.isReferrer && show.totalAmount < m.minThreshold;
+                  return (
                   <div key={m.id} className="flex items-center justify-between gap-3 py-2">
                     <div className="min-w-0">
                       <span className="text-sm">{m.name}</span>
@@ -771,15 +800,16 @@ export default function ShowDetail() {
                         ({m.paymentType === "percentage" ? `${m.paymentValue}%` : "Fixed"})
                       </span>
                       {m.isReferrer && <span className="text-xs text-primary ml-1">(Referral)</span>}
-                      {m.name === "Zain Shahid" && !m.isReferrer && show.totalAmount < 100000 && (
-                        <span className="text-xs text-muted-foreground ml-1">(Min 15K rule)</span>
+                      {showMinRule && (
+                        <span className="text-xs text-muted-foreground ml-1">(Min Rs {(m.minFlatRate ?? 0).toLocaleString()} rule)</span>
                       )}
                     </div>
                     <span className="text-sm font-semibold flex-shrink-0">
                       Rs {m.calculatedAmount.toLocaleString()}
                     </span>
                   </div>
-                ))}
+                  );
+                })}
 
                 <Separator />
 
