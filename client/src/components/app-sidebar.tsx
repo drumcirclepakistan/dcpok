@@ -1,5 +1,8 @@
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   Sidebar,
   SidebarContent,
@@ -14,12 +17,38 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, CalendarPlus, ListMusic, LogOut, Drum, Settings, Wallet, BookOpen } from "lucide-react";
-import { useMemo } from "react";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { LayoutDashboard, CalendarPlus, ListMusic, LogOut, Drum, Settings, Wallet, BookOpen, Pencil, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, logout, isAdmin, isMember } = useAuth();
+  const { user, logout, isAdmin, isMember, refreshUser } = useAuth();
+  const { toast } = useToast();
+  const [nameDialogOpen, setNameDialogOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  const nameUpdateMutation = useMutation({
+    mutationFn: async (name: string) => {
+      return apiRequest("PATCH", "/api/member/name", { name });
+    },
+    onSuccess: () => {
+      toast({ title: "Name updated", description: "Your display name has been changed." });
+      setNameDialogOpen(false);
+      refreshUser();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
   const navItems = useMemo(() => {
     if (isMember) {
@@ -42,6 +71,17 @@ export function AppSidebar() {
       { title: "Settings", url: "/settings", icon: Settings },
     ];
   }, [isAdmin, isMember, user?.canAddShows]);
+
+  const handleOpenNameDialog = () => {
+    setNewName(user?.displayName || "");
+    setNameDialogOpen(true);
+  };
+
+  const handleSaveName = () => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    nameUpdateMutation.mutate(trimmed);
+  };
 
   return (
     <Sidebar>
@@ -97,9 +137,20 @@ export function AppSidebar() {
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate" data-testid="text-user-name">
-              {user?.displayName || "User"}
-            </p>
+            <div className="flex items-center gap-1">
+              <p className="text-sm font-medium truncate" data-testid="text-user-name">
+                {user?.displayName || "User"}
+              </p>
+              {isMember && user?.canEditName && (
+                <button
+                  onClick={handleOpenNameDialog}
+                  className="flex-shrink-0 text-muted-foreground hover-elevate rounded-md p-0.5"
+                  data-testid="button-edit-name"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground truncate capitalize">
               {user?.role === "founder" ? "Admin" : "Member"}
             </p>
@@ -114,6 +165,45 @@ export function AppSidebar() {
           </Button>
         </div>
       </SidebarFooter>
+
+      <Dialog open={nameDialogOpen} onOpenChange={setNameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Display Name</DialogTitle>
+            <DialogDescription>
+              Update your display name. This will be reflected across all your shows and records.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Enter your name"
+              data-testid="input-new-name"
+              onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNameDialogOpen(false)} data-testid="button-cancel-name">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveName}
+              disabled={nameUpdateMutation.isPending || !newName.trim()}
+              data-testid="button-save-name"
+            >
+              {nameUpdateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sidebar>
   );
 }

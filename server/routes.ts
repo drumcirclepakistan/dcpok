@@ -1003,6 +1003,21 @@ export async function registerRoutes(
       if (!parsed.success) return res.status(400).json({ message: "Invalid show data", errors: parsed.error.flatten() });
 
       const show = await storage.createShow({ ...parsed.data, userId: founderUser.id });
+
+      await storage.createMember({
+        showId: show.id,
+        name: member.name,
+        role: member.role === "manager" ? "manager" : "session_player",
+        paymentType: member.paymentType === "percentage" ? "percentage" : "fixed",
+        paymentValue: member.normalRate ?? 0,
+        isReferrer: true,
+        calculatedAmount: 0,
+        referralRate: member.referralRate ?? null,
+        hasMinLogic: member.hasMinLogic ?? false,
+        minThreshold: member.minThreshold ?? null,
+        minFlatRate: member.minFlatRate ?? null,
+      });
+
       res.json(show);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Failed to create show" });
@@ -1207,7 +1222,14 @@ export async function registerRoutes(
 
   // Show Types CRUD
   app.get("/api/show-types", requireAuth, async (req, res) => {
-    const types = await storage.getShowTypes(req.session.userId!);
+    const user = await storage.getUser(req.session.userId!);
+    let userId = req.session.userId!;
+    if (user && user.role === "member") {
+      const allUsers = await storage.getAllUsers();
+      const founderUser = allUsers.find(u => u.role === "founder");
+      if (founderUser) userId = founderUser.id;
+    }
+    const types = await storage.getShowTypes(userId);
     res.json(types);
   });
 

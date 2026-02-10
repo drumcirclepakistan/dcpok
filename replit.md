@@ -53,8 +53,8 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - **Member Shows**: Only shows where member is assigned (via show_members), with estimated earnings note for upcoming shows
 - **Member Financials**: Self-only view with paid/unpaid/pending breakdowns, no access to other members' data
 - **Permissions** (controlled by admin in Settings > Band Members):
-  - `canAddShows`: Allows member to create new shows via the show form
-  - `canEditName`: Allows member to update their display name (propagates to show_members records)
+  - `canAddShows`: Allows member to create new shows via the show form; member is auto-added to band section as referrer
+  - `canEditName`: Allows member to update their display name via pencil icon in sidebar (propagates to show_members records)
 - **Route Protection**: All admin routes use `requireAdmin` middleware; members cannot access show details, settings, expenses, or other admin-only features
 - **Sidebar**: Members see Dashboard, My Shows, My Earnings (no Settings, no Show Detail links)
 
