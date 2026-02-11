@@ -136,6 +136,8 @@ export default function ShowDetail() {
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
+  const [refundType, setRefundType] = useState<string>("non_refundable");
+  const [refundAmount, setRefundAmount] = useState("");
 
   const invalidateShowCaches = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/shows", id] });
@@ -148,13 +150,15 @@ export default function ShowDetail() {
   };
 
   const cancelShowMutation = useMutation({
-    mutationFn: (data: { status: string; cancellationReason: string }) =>
+    mutationFn: (data: { status: string; cancellationReason: string; refundType: string; refundAmount: number }) =>
       apiRequest("PATCH", `/api/shows/${id}`, data),
     onSuccess: () => {
       invalidateShowCaches();
       toast({ title: "Show cancelled" });
       setCancelDialogOpen(false);
       setCancellationReason("");
+      setRefundType("non_refundable");
+      setRefundAmount("");
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -166,6 +170,8 @@ export default function ShowDetail() {
       apiRequest("PATCH", `/api/shows/${id}`, {
         status: new Date(show!.showDate) > new Date() ? "upcoming" : "completed",
         cancellationReason: null,
+        refundType: null,
+        refundAmount: 0,
       }),
     onSuccess: () => {
       invalidateShowCaches();
@@ -479,7 +485,14 @@ export default function ShowDetail() {
             </AlertDialogContent>
           </AlertDialog>
 
-          <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+          <AlertDialog open={cancelDialogOpen} onOpenChange={(open) => {
+            setCancelDialogOpen(open);
+            if (!open) {
+              setCancellationReason("");
+              setRefundType("non_refundable");
+              setRefundAmount("");
+            }
+          }}>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Cancel this show?</AlertDialogTitle>
@@ -487,22 +500,81 @@ export default function ShowDetail() {
                   This will mark "{show.title}" as cancelled. Cancelled shows are excluded from all earnings calculations.
                 </AlertDialogDescription>
               </AlertDialogHeader>
-              <div className="py-2">
-                <label className="text-sm font-medium mb-1.5 block">Reason for cancellation (optional)</label>
-                <Textarea
-                  value={cancellationReason}
-                  onChange={(e) => setCancellationReason(e.target.value)}
-                  placeholder="e.g. Client postponed, weather issues..."
-                  data-testid="input-cancellation-reason"
-                  className="resize-none"
-                  rows={3}
-                />
+              <div className="space-y-4 py-2">
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Reason for cancellation (optional)</label>
+                  <Textarea
+                    value={cancellationReason}
+                    onChange={(e) => setCancellationReason(e.target.value)}
+                    placeholder="e.g. Client postponed, weather issues..."
+                    data-testid="input-cancellation-reason"
+                    className="resize-none"
+                    rows={2}
+                  />
+                </div>
+
+                {show.advancePayment > 0 && (
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">
+                      Advance Payment: Rs {show.advancePayment.toLocaleString()}
+                    </label>
+                    <Select value={refundType} onValueChange={(val) => {
+                      setRefundType(val);
+                      if (val !== "partial") setRefundAmount("");
+                    }}>
+                      <SelectTrigger data-testid="select-refund-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="non_refundable">Advance will not be refunded</SelectItem>
+                        <SelectItem value="partial">Partial refund</SelectItem>
+                        <SelectItem value="complete">Complete refund (Rs {show.advancePayment.toLocaleString()})</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {refundType === "partial" && (
+                      <div className="mt-2">
+                        <label className="text-xs text-muted-foreground mb-1 block">Refund amount (Rs)</label>
+                        <Input
+                          type="number"
+                          value={refundAmount}
+                          onChange={(e) => setRefundAmount(e.target.value)}
+                          placeholder="Enter refund amount"
+                          max={show.advancePayment}
+                          data-testid="input-refund-amount"
+                        />
+                        {Number(refundAmount) > show.advancePayment && (
+                          <p className="text-xs text-destructive mt-1">Refund cannot exceed advance payment</p>
+                        )}
+                      </div>
+                    )}
+
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {refundType === "non_refundable" && `Rs ${show.advancePayment.toLocaleString()} will be retained from this cancelled show.`}
+                      {refundType === "complete" && "Full advance will be returned. No amount retained."}
+                      {refundType === "partial" && refundAmount && Number(refundAmount) <= show.advancePayment && `Rs ${(show.advancePayment - Number(refundAmount)).toLocaleString()} will be retained from this cancelled show.`}
+                    </p>
+                  </div>
+                )}
               </div>
               <AlertDialogFooter>
                 <AlertDialogCancel data-testid="button-cancel-cancel">Go Back</AlertDialogCancel>
                 <AlertDialogAction
                   data-testid="button-confirm-cancel"
-                  onClick={() => cancelShowMutation.mutate({ status: "cancelled", cancellationReason: cancellationReason.trim() })}
+                  disabled={refundType === "partial" && (!refundAmount || Number(refundAmount) > show.advancePayment || Number(refundAmount) < 0)}
+                  onClick={() => {
+                    const computedRefundAmount = refundType === "complete"
+                      ? show.advancePayment
+                      : refundType === "partial"
+                        ? Number(refundAmount)
+                        : 0;
+                    cancelShowMutation.mutate({
+                      status: "cancelled",
+                      cancellationReason: cancellationReason.trim(),
+                      refundType: show.advancePayment > 0 ? refundType : "non_refundable",
+                      refundAmount: computedRefundAmount,
+                    });
+                  }}
                 >
                   {cancelShowMutation.isPending ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -642,7 +714,7 @@ export default function ShowDetail() {
               )}
 
               {show.status === "cancelled" && (
-                <div className="border-t pt-5">
+                <div className="border-t pt-5 space-y-4">
                   <div className="flex items-start gap-3">
                     <MessageSquare className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
                     <div>
@@ -652,6 +724,37 @@ export default function ShowDetail() {
                       </p>
                     </div>
                   </div>
+
+                  {show.advancePayment > 0 && (
+                    <div className="flex items-start gap-3">
+                      <Receipt className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Advance Refund Status</p>
+                        <div className="mt-1" data-testid="text-refund-status">
+                          {(!show.refundType || show.refundType === "non_refundable") && (
+                            <div>
+                              <Badge variant="secondary">Non-refundable</Badge>
+                              <p className="text-sm mt-1">Rs {show.advancePayment.toLocaleString()} retained</p>
+                            </div>
+                          )}
+                          {show.refundType === "complete" && (
+                            <div>
+                              <Badge variant="outline">Complete Refund</Badge>
+                              <p className="text-sm mt-1">Rs {show.advancePayment.toLocaleString()} refunded</p>
+                            </div>
+                          )}
+                          {show.refundType === "partial" && (
+                            <div>
+                              <Badge variant="outline">Partial Refund</Badge>
+                              <p className="text-sm mt-1">
+                                Rs {(show.refundAmount || 0).toLocaleString()} refunded, Rs {(show.advancePayment - (show.refundAmount || 0)).toLocaleString()} retained
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

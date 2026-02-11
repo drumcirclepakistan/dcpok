@@ -13,7 +13,7 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 ## Key Features
 - Session-based login (admin account: username `founder`, password `drumcircle2024`)
 - Dashboard with time range filtering (Lifetime, This Year, Last Year, This/Last Month, Last 3/6 Months, Custom)
-- Dashboard stats: Total Shows, Total Revenue, Revenue After Expenses, My Earnings, Upcoming Shows, Pending Payments, No Advance Received (warning)
+- Dashboard stats: Total Shows, Total Revenue, Revenue After Expenses, My Earnings, Cancelled Show Amount (retained advance from cancelled shows), Upcoming Shows, Pending Payments, No Advance Received (warning)
 - Dashboard insights: Top Cities, Top Show Types (filtered by time range)
 - Upcoming count and pending payments always show full data regardless of time range
 - Full show CRUD (add, view, edit, delete)
@@ -28,6 +28,8 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - Shows list highlights completed-but-unpaid shows in red "Action Required" section
 - Shows list highlights upcoming shows with no advance in orange "No Advance Received" section
 - Paid/Unpaid filter on shows list
+- **Cancelled shows**: Cancel/restore shows with optional cancellation reason; refund handling (non-refundable, partial refund with amount, complete refund); cancelled shows displayed in separate section on shows list; excluded from all earnings calculations; retained advance amount shown as "Cancelled Show Amount" on dashboard and added to total revenue
+- **Refund fields**: `refundType` (non_refundable/partial/complete) and `refundAmount` stored per cancelled show
 - Show expenses tracking with add/delete
 - Band member assignment per show from settings-defined members with automated payment calculations
 - **Manual amount override**: Each member in band section can have their calculated amount manually overridden via "Custom amount" checkbox

@@ -367,6 +367,7 @@ export async function registerRoutes(
         organizationName: "Organization", publicShowFor: "Public Show For",
         numberOfDrums: "Number of Drums", location: "Location", isPaid: "Paid Status",
         cancellationReason: "Cancellation Reason",
+        refundType: "Refund Type", refundAmount: "Refund Amount",
       };
       for (const [key, label] of Object.entries(fieldLabels)) {
         const oldVal = (existing as any)[key];
@@ -374,7 +375,7 @@ export async function registerRoutes(
         if (oldVal instanceof Date && newVal instanceof Date) {
           if (oldVal.getTime() !== newVal.getTime()) changes.push(`${label}`);
         } else if (String(oldVal ?? "") !== String(newVal ?? "")) {
-          if (key === "totalAmount" || key === "advancePayment") {
+          if (key === "totalAmount" || key === "advancePayment" || key === "refundAmount") {
             changes.push(`${label}: Rs ${oldVal ?? 0} → Rs ${newVal ?? 0}`);
           } else if (key === "status") {
             changes.push(`Status: ${oldVal} → ${newVal}`);
@@ -622,12 +623,27 @@ export async function registerRoutes(
         .reduce((s, sh) => s + (sh.totalAmount - sh.advancePayment), 0);
       const noAdvanceCount = activeShows.filter((s) => s.status === "upcoming" && s.advancePayment === 0).length;
 
+      let cancelledShows = allShows.filter(s => s.status === "cancelled");
+      if (from) {
+        const fromDate = new Date(from as string);
+        cancelledShows = cancelledShows.filter((s) => new Date(s.showDate) >= fromDate);
+      }
+      if (to) {
+        const toDate = new Date(to as string);
+        cancelledShows = cancelledShows.filter((s) => new Date(s.showDate) <= toDate);
+      }
+      const cancelledShowAmount = cancelledShows.reduce((sum, s) => {
+        const retained = s.advancePayment - (s.refundAmount || 0);
+        return sum + Math.max(0, retained);
+      }, 0);
+
       res.json({
         totalShows: filteredShows.length,
-        totalRevenue,
+        totalRevenue: totalRevenue + cancelledShowAmount,
         totalExpenses,
-        revenueAfterExpenses,
-        founderRevenue,
+        revenueAfterExpenses: revenueAfterExpenses + cancelledShowAmount,
+        founderRevenue: founderRevenue + cancelledShowAmount,
+        cancelledShowAmount,
         upcomingCount,
         pendingAmount,
         noAdvanceCount,

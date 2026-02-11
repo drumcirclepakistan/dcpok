@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth";
 import {
   CalendarDays, TrendingUp, Music, MapPin, Layers,
   Wallet, Receipt, Crown, AlertCircle, AlertTriangle, Calendar as CalendarIcon,
-  CheckCircle, UserCheck,
+  CheckCircle, UserCheck, Ban,
 } from "lucide-react";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths, subYears, endOfDay } from "date-fns";
 import { Link } from "wouter";
@@ -36,6 +36,7 @@ interface DashboardStats {
   totalExpenses: number;
   revenueAfterExpenses: number;
   founderRevenue: number;
+  cancelledShowAmount: number;
   upcomingCount: number;
   pendingAmount: number;
   noAdvanceCount: number;
@@ -547,6 +548,14 @@ export default function Dashboard() {
                   testId="stat-founder-revenue"
                   variant="highlight"
                 />
+                {(adminStats?.cancelledShowAmount || 0) > 0 && (
+                  <StatCard
+                    label="Cancelled Show Amount"
+                    value={`Rs ${(adminStats?.cancelledShowAmount || 0).toLocaleString()}`}
+                    icon={Ban}
+                    testId="stat-cancelled-amount"
+                  />
+                )}
                 <StatCard
                   label="Upcoming Shows"
                   value={adminStats?.upcomingCount || 0}
