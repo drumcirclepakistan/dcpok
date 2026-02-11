@@ -135,7 +135,7 @@ export default function DirectoryPage() {
     const nonCancelled = searchResults.filter((s) => s.status !== "cancelled");
     const completed = nonCancelled.filter((s) => new Date(s.showDate) <= new Date()).length;
     const upcoming = nonCancelled.filter((s) => new Date(s.showDate) > new Date()).length;
-    const totalRevenue = searchResults.reduce((sum, s) => sum + s.totalAmount, 0);
+    const totalRevenue = nonCancelled.reduce((sum, s) => sum + s.totalAmount, 0);
 
     const typeBreakdown: Record<string, number> = {};
     const cityBreakdown: Record<string, number> = {};
