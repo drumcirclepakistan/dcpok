@@ -37,14 +37,13 @@ export async function registerRoutes(
 ): Promise<Server> {
   const PgStore = connectPgSimple(session);
 
-  // FIX: Required for session cookies to work on Render's proxy
+  // trust proxy is required for cookies to work on Render's infrastructure
   app.set("trust proxy", 1);
 
   app.use(
     session({
       store: new PgStore({
         conString: process.env.DATABASE_URL,
-        // FIX: prevent missing table.sql error
         createTableIfMissing: false, 
         pgOptions: { ssl: { rejectUnauthorized: false } } 
       }),
@@ -64,11 +63,11 @@ export async function registerRoutes(
   const { db } = await import("./db");
   const { sql } = await import("drizzle-orm");
 
-  // --- DATABASE INITIALIZATION & PRODUCTION FIXES ---
+  // --- START DATABASE INITIALIZATION & SCHEMA REPAIRS ---
   try {
-    console.log("Applying database repairs and schema checks...");
+    console.log("Initializing database schema and applying Render fixes...");
 
-    // FIX: Manual session table creation
+    // Create session table manually to fix missing table.sql error
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "session" (
         "sid" varchar NOT NULL COLLATE "default",
@@ -137,7 +136,6 @@ export async function registerRoutes(
     await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT false`);
     await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS public_show_for TEXT`);
     await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS cancellation_reason TEXT`);
-    // FIX: Missing columns causing Show List crashes
     await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS number_of_drums INTEGER DEFAULT 0`);
     await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS location TEXT`);
     await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS refund_type TEXT`);
@@ -198,7 +196,6 @@ export async function registerRoutes(
     await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_add_shows BOOLEAN NOT NULL DEFAULT false`);
     await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_edit_name BOOLEAN NOT NULL DEFAULT false`);
     await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_generate_invoice BOOLEAN NOT NULL DEFAULT false`);
-    // FIX: Missing columns for member area permissions
     await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS email TEXT`);
     await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_view_amounts BOOLEAN DEFAULT false`);
     await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_show_contacts BOOLEAN DEFAULT false`);
@@ -211,7 +208,6 @@ export async function registerRoutes(
       )
     `);
     
-    // FIX: Show Types fields
     await db.execute(sql`ALTER TABLE show_types ADD COLUMN IF NOT EXISTS show_org_field BOOLEAN DEFAULT true`);
     await db.execute(sql`ALTER TABLE show_types ADD COLUMN IF NOT EXISTS show_public_field BOOLEAN DEFAULT true`);
 
@@ -251,17 +247,18 @@ export async function registerRoutes(
       CREATE TABLE IF NOT EXISTS invoices (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         type invoice_type NOT NULL,
-        number INTEGER NOT NULL,
+        number INTEGER,
         display_number TEXT NOT NULL,
         bill_to TEXT NOT NULL,
         city TEXT NOT NULL,
-        number_of_drums INTEGER NOT NULL,
-        duration TEXT NOT NULL,
+        number_of_drums INTEGER,
+        duration TEXT,
         event_date TIMESTAMP NOT NULL,
         amount INTEGER NOT NULL,
         tax_mode tax_mode NOT NULL DEFAULT 'exclusive',
         items TEXT,
         shared_with_member_id VARCHAR,
+        created_by_member_name TEXT,
         created_at TIMESTAMP NOT NULL DEFAULT now(),
         user_id VARCHAR NOT NULL
       )
@@ -270,19 +267,19 @@ export async function registerRoutes(
     await db.execute(sql`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS created_by_member_name TEXT`);
 
     await seedDatabase();
-
-    // Ensure founder admin exists
+    
     const adminExists = await db.execute(sql`SELECT * FROM users WHERE role = 'founder' LIMIT 1`);
     if (adminExists.rows.length === 0) {
        await db.execute(sql`INSERT INTO users (username, password, display_name, role) 
                             VALUES ('admin', 'Drumcircle2024', 'Founder', 'founder')`);
     }
-
-    console.log("Database schema repairs complete.");
+    
+    console.log("Database schema check complete.");
   } catch (dbError) {
     console.error("Non-fatal Database Error during startup:", dbError);
   }
 
+  // --- HELPERS ---
   async function logActivity(userId: string, userName: string, action: string, details?: string) {
     try {
       await storage.createActivityLog({ userId, userName, action, details: details || null });
@@ -299,7 +296,7 @@ export async function registerRoutes(
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { username, password } = req.body;
-      if (!username || !password) return res.status(400).json({ message: "Username and password required" });
+      if (!username || !password) return res.status(400).json({ message: "Required" });
       const user = await storage.getUserByUsername(username);
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
       
@@ -307,7 +304,7 @@ export async function registerRoutes(
       if (!valid) return res.status(401).json({ message: "Invalid credentials" });
       
       req.session.userId = user.id;
-      req.session.save((err) => {
+      req.session.save(async (err) => {
         if (err) return res.status(500).json({ message: "Session error" });
         logActivity(user.id, user.displayName, "login", `${user.displayName} logged in`);
         const { password: _, ...safeUser } = user;
@@ -353,36 +350,6 @@ export async function registerRoutes(
     req.session.destroy(() => res.json({ message: "Logged out" }));
   });
 
-  app.post("/api/auth/emergency-reset", async (req, res) => {
-    try {
-      const { recoveryKey, newPassword } = req.body;
-      if (!recoveryKey || !newPassword) return res.status(400).json({ message: "Recovery key and new password required" });
-      const envKey = process.env.ADMIN_RECOVERY_KEY;
-      if (!envKey) return res.status(503).json({ message: "Recovery not configured" });
-      if (recoveryKey !== envKey) return res.status(401).json({ message: "Invalid recovery key" });
-      if (newPassword.length < 6) return res.status(400).json({ message: "Password too short" });
-      const allUsers = await storage.getAllUsers();
-      const founder = allUsers.find(u => u.role === "founder");
-      if (!founder) return res.status(404).json({ message: "Admin account not found" });
-      await storage.updateUser(founder.id, { password: newPassword });
-      logActivity(founder.id, founder.displayName, "emergency_password_reset", "Admin password reset");
-      res.json({ message: "Password reset successfully." });
-    } catch (err: any) { res.status(500).json({ message: "Failed" }); }
-  });
-
-  app.patch("/api/auth/change-password", requireAuth, async (req, res) => {
-    try {
-      const { currentPassword, newPassword } = req.body;
-      const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(404).json({ message: "User not found" });
-      const valid = (user.password === currentPassword) || await storage.verifyPassword(currentPassword, user.password);
-      if (!valid) return res.status(401).json({ message: "Current password is incorrect" });
-      await storage.updateUser(user.id, { password: newPassword });
-      logActivity(user.id, user.displayName, "password_changed", `${user.displayName} changed password`);
-      res.json({ message: "Password changed successfully" });
-    } catch (err: any) { res.status(500).json({ message: "Failed" }); }
-  });
-
   // --- SHOWS CRUD ---
   app.get("/api/shows", requireAdmin, async (req, res) => {
     res.json(await storage.getShows(req.session.userId!));
@@ -401,7 +368,7 @@ export async function registerRoutes(
         return d.toDateString() === targetDate.toDateString();
       }).map((s) => ({ id: s.id, title: s.title, city: s.city, showType: s.showType, showDate: s.showDate.toISOString() }));
       res.json({ conflicts });
-    } catch (err: any) { res.status(500).json({ message: "Failed" }); }
+    } catch (err) { res.status(500).json({ message: "Failed" }); }
   });
 
   app.get("/api/shows/:id", requireAdmin, async (req, res) => {
@@ -416,15 +383,24 @@ export async function registerRoutes(
       const show = await storage.createShow({ ...parsed, userId: req.session.userId! });
       logActivity(req.session.userId!, "Admin", "show_created", `Created "${show.title}"`);
       res.status(201).json(show);
-    } catch (err: any) { res.status(400).json({ message: err.message }); }
+    } catch (err: any) { res.status(400).json({ message: "Invalid Data" }); }
   });
 
   app.patch("/api/shows/:id", requireAdmin, async (req, res) => {
     try {
       const existing = await storage.getShow(req.params.id as string);
-      if (!existing || existing.userId !== req.session.userId) return res.status(404).json({ message: "Show not found" });
+      if (!existing || existing.userId !== req.session.userId) return res.status(404).json({ message: "Not found" });
+      
       const parsed = insertShowSchema.partial().parse(req.body);
       const updated = await storage.updateShow(req.params.id as string, parsed);
+
+      const changes: string[] = [];
+      const fieldLabels: Record<string, string> = { title: "Title", status: "Status", totalAmount: "Total Amount" };
+      for (const [key, label] of Object.entries(fieldLabels)) {
+        if (String((existing as any)[key]) !== String((updated as any)[key])) changes.push(label);
+      }
+      if (changes.length > 0) logActivity(req.session.userId!, "Admin", "show_updated", `Updated "${existing.title}": ${changes.join(", ")}`);
+      
       res.json(updated);
     } catch (err: any) { res.status(400).json({ message: "Update failed" }); }
   });
@@ -434,7 +410,7 @@ export async function registerRoutes(
     res.json({ message: "Deleted" });
   });
 
-  // --- SHOW COMPONENTS ---
+  // --- SHOW MEMBERS & EXPENSES ---
   app.get("/api/shows/:id/expenses", requireAdmin, async (req, res) => {
     res.json(await storage.getShowExpenses(req.params.id));
   });
@@ -444,42 +420,47 @@ export async function registerRoutes(
     res.status(201).json(await storage.createExpense(parsed));
   });
 
-  app.delete("/api/shows/:id/expenses/:expenseId", requireAdmin, async (req, res) => {
-    await storage.deleteExpense(req.params.expenseId);
-    res.json({ message: "Deleted" });
-  });
-
   app.get("/api/shows/:id/members", requireAdmin, async (req, res) => {
     res.json(await storage.getShowMembers(req.params.id));
   });
 
   app.put("/api/shows/:id/members", requireAdmin, async (req, res) => {
-    await storage.deleteShowMembers(req.params.id);
-    const members = req.body.members || [];
-    const created = [];
-    for (const m of members) {
-      const parsed = insertMemberSchema.parse({ ...m, showId: req.params.id });
-      created.push(await storage.createMember(parsed));
-    }
-    res.json(created);
-  });
-
-  app.get("/api/shows/:id/retained-allocations", requireAdmin, async (req, res) => {
-    res.json(await storage.getRetainedFundAllocations(req.params.id));
-  });
-
-  app.put("/api/shows/:id/retained-allocations", requireAdmin, async (req, res) => {
     try {
       const show = await storage.getShow(req.params.id);
-      if (!show || show.status !== "cancelled") return res.status(400).json({ message: "Show is not cancelled" });
-      const allocations = req.body.allocations || [];
-      const parsed = allocations.map((a: any) => ({ ...a, showId: show.id }));
-      const created = await storage.replaceRetainedFundAllocations(show.id, parsed);
+      const existingMembers = await storage.getShowMembers(req.params.id);
+      const existingNames = new Set(existingMembers.map(m => m.name));
+      
+      await storage.deleteShowMembers(req.params.id);
+      const members = req.body.members || [];
+      const created = [];
+      for (const m of members) {
+        const parsed = insertMemberSchema.parse({ ...m, showId: req.params.id });
+        created.push(await storage.createMember(parsed));
+      }
+
+      const allBand = await storage.getBandMembers();
+      const userIdMap: Record<string, string> = {};
+      const emailMap: Record<string, string> = {};
+      for (const b of allBand) {
+        if (b.userId) userIdMap[b.name] = b.userId;
+        if (b.email) emailMap[b.name] = b.email;
+      }
+
+      const newNames = created.filter(m => !existingNames.has(m.name)).map(m => m.name);
+      for (const name of newNames) {
+        if (userIdMap[name]) notifyUser(userIdMap[name], "added_to_show", `You were added to "${show!.title}"`, show!.id, show!.title);
+      }
+
+      if (isEmailConfigured() && newNames.length > 0) {
+        const emailList = newNames.filter(n => emailMap[n]).map(n => ({ name: n, email: emailMap[n] }));
+        if (emailList.length > 0) sendBulkShowAssignment(emailList, { showTitle: show!.title, showDate: show!.showDate.toISOString(), city: show!.city, location: show!.location, showType: show!.showType, numberOfDrums: show!.numberOfDrums });
+      }
+
       res.json(created);
-    } catch (err: any) { res.status(500).json({ message: "Failed" }); }
+    } catch (err: any) { res.status(400).json({ message: "Member update failed" }); }
   });
 
-  // --- DASHBOARD & STATS ---
+  // --- DASHBOARD STATS ---
   app.get("/api/dashboard/stats", requireAdmin, async (req, res) => {
     try {
       const allShows = await storage.getShows(req.session.userId!);
@@ -504,15 +485,14 @@ export async function registerRoutes(
         upcomingCount: allShows.filter(s => new Date(s.showDate) > new Date() && s.status !== 'cancelled').length,
         pendingAmount: allShows.filter(s => !s.isPaid && s.status !== 'cancelled').reduce((s, sh) => s + (sh.totalAmount - sh.advancePayment), 0),
       });
-    } catch (err: any) { res.status(500).json({ message: "Failed to compute stats" }); }
+    } catch (err) { res.status(500).json({ message: "Failed to compute stats" }); }
   });
 
   app.get("/api/financials", requireAdmin, async (req, res) => {
     try {
       const allShows = await storage.getShows(req.session.userId!);
-      const { member } = req.query as { member?: string };
-      res.json({ member: member || "Haider Jamil", shows: allShows.sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()) });
-    } catch (err: any) { res.status(500).json({ message: "Failed" }); }
+      res.json({ member: "Founder", shows: allShows.sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()) });
+    } catch (err) { res.status(500).json({ message: "Failed" }); }
   });
 
   // --- BAND MEMBERS & ACCOUNTS ---
@@ -541,7 +521,8 @@ export async function registerRoutes(
 
   app.post("/api/band-members/:id/reset-password", requireAdmin, async (req, res) => {
     const member = await storage.getBandMember(req.params.id);
-    await storage.updateUser(member!.userId!, { password: req.body.password });
+    if (!member?.userId) return res.status(400).json({ message: "No account" });
+    await storage.updateUser(member.userId, { password: req.body.password });
     res.json({ message: "Reset success" });
   });
 
@@ -553,12 +534,13 @@ export async function registerRoutes(
   app.post("/api/invoices", requireAdmin, async (req, res) => {
     try {
       const next = await storage.getNextInvoiceNumber();
+      const parsed = insertInvoiceSchema.parse(req.body);
       const invoice = await storage.createInvoice({ 
-        ...req.body, 
+        ...parsed, 
+        items: JSON.stringify(parsed.items),
         number: next, 
         displayNumber: `DCP-${next}`, 
-        userId: req.session.userId!,
-        city: req.body.city || "N/A"
+        userId: req.session.userId! 
       });
       res.json(invoice);
     } catch (err: any) { res.status(500).json({ message: "Invoice error" }); }
@@ -590,16 +572,10 @@ export async function registerRoutes(
     res.json(myShows);
   });
 
-  // Restore additional settings/misc original routes
-  app.get("/api/settings", requireAdmin, async (req, res) => {
-    const userSettings = await storage.getSettings(req.session.userId!);
-    const merged = { ...defaultSettings };
-    for (const s of userSettings) merged[s.key] = s.value;
-    res.json(merged);
-  });
-
-  app.get("/api/show-types", requireAuth, async (req, res) => {
-    res.json(await storage.getShowTypes(req.session.userId!));
+  app.get("/api/member/dashboard", requireAuth, async (req, res) => {
+     const user = await storage.getUser(req.session.userId!);
+     const bm = await storage.getBandMemberByUserId(user!.id);
+     res.json({ name: bm?.name, status: "Active" });
   });
 
   app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
