@@ -38,11 +38,24 @@ export async function registerRoutes(
   const PgStore = connectPgSimple(session);
 
   app.use(
-    session({
-      store: new PgStore({
-        conString: process.env.DATABASE_URL,
-        createTableIfMissing: true,
-      }),
+  session({
+    store: new PgStore({
+      conString: process.env.DATABASE_URL,
+      createTableIfMissing: true,
+      // Add this line to force SSL for the session store
+      pgOptions: { ssl: { rejectUnauthorized: false } } 
+    }),
+    secret: process.env.SESSION_SECRET || "drum-circle-pk-secret-2024",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // Better security on Render
+      sameSite: "lax",
+    },
+  })
+);
       secret: process.env.SESSION_SECRET || "drum-circle-pk-secret-2024",
       resave: false,
       saveUninitialized: false,
