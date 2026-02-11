@@ -691,6 +691,16 @@ export async function registerRoutes(
         cancelledShowAmount += retained;
       }
 
+      const allRetainedAllocs = await storage.getAllRetainedFundAllocations();
+      const cancelledShowIds = new Set(cancelledShows.map(s => s.id));
+      let cancelledAllocated = 0;
+      for (const a of allRetainedAllocs) {
+        if (cancelledShowIds.has(a.showId)) {
+          cancelledAllocated += a.amount;
+        }
+      }
+      const cancelledUnallocated = Math.max(0, cancelledShowAmount - cancelledAllocated);
+
       res.json({
         totalShows: filteredShows.length,
         totalRevenue: totalRevenue + cancelledShowAmount,
@@ -698,6 +708,8 @@ export async function registerRoutes(
         revenueAfterExpenses,
         founderRevenue,
         cancelledShowAmount,
+        cancelledAllocated,
+        cancelledUnallocated,
         upcomingCount,
         pendingAmount,
         noAdvanceCount,
@@ -798,6 +810,39 @@ export async function registerRoutes(
         .sort((a, b) => b[1] - a[1])
         .map(([city, count]) => ({ city, count }));
 
+      const allAllocations = await storage.getAllRetainedFundAllocations();
+      const allBandMembersForAlloc = await storage.getBandMembers();
+      const memberNameById: Record<string, string> = {};
+      for (const bm of allBandMembersForAlloc) {
+        memberNameById[bm.id] = bm.name;
+      }
+
+      let retainedFundsEarnings = 0;
+      const retainedAllocDetails: { showId: string; showTitle: string; amount: number }[] = [];
+
+      if (member) {
+        const targetBandMember = allBandMembersForAlloc.find(bm => bm.name === member);
+        if (targetBandMember) {
+          const memberAllocations = allAllocations.filter(a => a.bandMemberId === targetBandMember.id);
+          for (const alloc of memberAllocations) {
+            const cancelledShow = allShows.find(s => s.id === alloc.showId && s.status === "cancelled");
+            if (cancelledShow) {
+              const showDate = new Date(cancelledShow.showDate);
+              if (from && showDate < new Date(from)) continue;
+              if (to && showDate > new Date(to)) continue;
+              retainedFundsEarnings += alloc.amount;
+              retainedAllocDetails.push({
+                showId: cancelledShow.id,
+                showTitle: cancelledShow.title,
+                amount: alloc.amount,
+              });
+            }
+          }
+        }
+      }
+
+      totalEarnings += retainedFundsEarnings;
+
       const avgPerShow = totalShowsPerformed > 0 ? Math.round(totalEarnings / totalShowsPerformed) : 0;
 
       const paidShows = pastShows.filter((s) => s.isPaid).length;
@@ -819,6 +864,8 @@ export async function registerRoutes(
         cities,
         shows: pastShows.sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()),
         upcomingShows: upcomingShows.sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime()),
+        retainedFundsEarnings,
+        retainedAllocDetails,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to compute financials" });
@@ -1027,6 +1074,24 @@ export async function registerRoutes(
       }
 
       const cities = Object.entries(citySet).sort((a, b) => b[1] - a[1]).map(([city, count]) => ({ city, count }));
+
+      const allAllocsMember = await storage.getAllRetainedFundAllocations();
+      const allShowsIncCancelled = await getAllShowsForMember();
+      let retainedFundsEarnings = 0;
+      const retainedAllocDetails: { showId: string; showTitle: string; amount: number }[] = [];
+      const memberAllocs = allAllocsMember.filter(a => a.bandMemberId === member.id);
+      for (const alloc of memberAllocs) {
+        const cancelledShow = allShowsIncCancelled.find(s => s.id === alloc.showId && s.status === "cancelled");
+        if (cancelledShow) {
+          const showDate = new Date(cancelledShow.showDate);
+          if (from && showDate < new Date(from)) continue;
+          if (to && showDate > new Date(to)) continue;
+          retainedFundsEarnings += alloc.amount;
+          retainedAllocDetails.push({ showId: cancelledShow.id, showTitle: cancelledShow.title, amount: alloc.amount });
+        }
+      }
+      totalEarnings += retainedFundsEarnings;
+
       const avgPerShow = totalShowsPerformed > 0 ? Math.round(totalEarnings / totalShowsPerformed) : 0;
       const paidShows = pastShows.filter(s => s.isPaid).length;
       const unpaidPastShows = pastShows.filter(s => !s.isPaid);
@@ -1048,6 +1113,8 @@ export async function registerRoutes(
         cities,
         shows: pastShows.sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime()),
         upcomingShows: upcomingShows.sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime()),
+        retainedFundsEarnings,
+        retainedAllocDetails,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to compute member financials" });

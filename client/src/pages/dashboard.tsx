@@ -37,6 +37,8 @@ interface DashboardStats {
   revenueAfterExpenses: number;
   founderRevenue: number;
   cancelledShowAmount: number;
+  cancelledAllocated?: number;
+  cancelledUnallocated?: number;
   upcomingCount: number;
   pendingAmount: number;
   noAdvanceCount: number;
@@ -98,12 +100,14 @@ function StatCard({
   icon: Icon,
   testId,
   variant,
+  subtitle,
 }: {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
   testId: string;
   variant?: "default" | "highlight" | "warning";
+  subtitle?: string;
 }) {
   const iconBg = variant === "warning" ? "bg-orange-500/10" : "bg-primary/10";
   const iconColor = variant === "warning" ? "text-orange-500" : "text-primary";
@@ -117,6 +121,7 @@ function StatCard({
             <p className={`text-xl font-bold mt-1 ${valueColor}`} data-testid={testId}>
               {value}
             </p>
+            {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
           <div className={`w-9 h-9 rounded-md ${iconBg} flex items-center justify-center flex-shrink-0`}>
             <Icon className={`w-4 h-4 ${iconColor}`} />
@@ -554,6 +559,11 @@ export default function Dashboard() {
                     value={`Rs ${(adminStats?.cancelledShowAmount || 0).toLocaleString()}`}
                     icon={Ban}
                     testId="stat-cancelled-amount"
+                    subtitle={
+                      (adminStats?.cancelledAllocated || 0) > 0
+                        ? `Rs ${adminStats!.cancelledAllocated!.toLocaleString()} allocated, Rs ${(adminStats?.cancelledUnallocated || 0).toLocaleString()} unallocated`
+                        : "Not allocated to any member"
+                    }
                   />
                 )}
                 <StatCard

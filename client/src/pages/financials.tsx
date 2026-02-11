@@ -54,6 +54,8 @@ interface FinancialStats {
   cities: { city: string; count: number }[];
   shows: FinancialShow[];
   upcomingShows: FinancialShow[];
+  retainedFundsEarnings?: number;
+  retainedAllocDetails?: { showId: string; showTitle: string; amount: number }[];
 }
 
 interface BandMemberInfo {
@@ -257,6 +259,11 @@ export default function FinancialsPage() {
                 {(stats?.paidShows || 0) > 0 && (
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     from {stats?.paidShows} paid show{stats?.paidShows !== 1 ? "s" : ""}
+                  </p>
+                )}
+                {(stats?.retainedFundsEarnings || 0) > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5" data-testid="text-retained-earnings-note">
+                    includes Rs {stats!.retainedFundsEarnings!.toLocaleString()} from cancelled show allocations
                   </p>
                 )}
               </CardContent>

@@ -35,8 +35,10 @@ import {
   Loader2, CheckCircle, AlertCircle, Drum, Ban, MessageSquare,
 } from "lucide-react";
 import { format } from "date-fns";
-import { useState, useMemo } from "react";
-import { calculateDynamicPayout, type Show, type ShowExpense, type ShowMember, type PayoutConfig } from "@shared/schema";
+import { useState, useMemo, useEffect } from "react";
+import { calculateDynamicPayout, type Show, type ShowExpense, type ShowMember, type PayoutConfig, type RetainedFundAllocation } from "@shared/schema";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const statusColors: Record<string, string> = {
   upcoming: "default",
@@ -94,6 +96,11 @@ export default function ShowDetail() {
     queryKey: ["/api/band-members"],
   });
 
+  const { data: retainedAllocations = [] } = useQuery<RetainedFundAllocation[]>({
+    queryKey: ["/api/shows", id, "retained-allocations"],
+    enabled: !!id && show?.status === "cancelled",
+  });
+
   const bandMemberConfigMap = useMemo(() => {
     const map: Record<string, BandMemberConfig> = {};
     for (const bm of bandMembers) {
@@ -139,6 +146,13 @@ export default function ShowDetail() {
   const [refundType, setRefundType] = useState<string>("non_refundable");
   const [refundAmount, setRefundAmount] = useState("");
 
+  const [allocationMode, setAllocationMode] = useState<"keep_separate" | "assign" | "split">("keep_separate");
+  const [allocationSplitMode, setAllocationSplitMode] = useState<"equal" | "payout_rules" | "manual">("equal");
+  const [allocationMember, setAllocationMember] = useState("");
+  const [allocationSelectedMembers, setAllocationSelectedMembers] = useState<string[]>([]);
+  const [allocationManualAmounts, setAllocationManualAmounts] = useState<Record<string, number>>({});
+  const [allocationEditing, setAllocationEditing] = useState(false);
+
   const invalidateShowCaches = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/shows", id] });
     queryClient.invalidateQueries({ queryKey: ["/api/shows"] });
@@ -166,21 +180,67 @@ export default function ShowDetail() {
   });
 
   const uncancelShowMutation = useMutation({
-    mutationFn: () =>
-      apiRequest("PATCH", `/api/shows/${id}`, {
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/shows/${id}/retained-allocations`);
+      return apiRequest("PATCH", `/api/shows/${id}`, {
         status: new Date(show!.showDate) > new Date() ? "upcoming" : "completed",
         cancellationReason: null,
         refundType: null,
         refundAmount: 0,
-      }),
+      });
+    },
     onSuccess: () => {
       invalidateShowCaches();
+      queryClient.invalidateQueries({ queryKey: ["/api/shows", id, "retained-allocations"] });
       toast({ title: "Show restored" });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
+
+  const saveAllocationsMutation = useMutation({
+    mutationFn: (data: { allocations: { bandMemberId: string; memberName: string; amount: number }[] }) =>
+      apiRequest("PUT", `/api/shows/${id}/retained-allocations`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shows", id, "retained-allocations"] });
+      invalidateShowCaches();
+      setAllocationEditing(false);
+      toast({ title: "Retained funds allocation saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const clearAllocationsMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/shows/${id}/retained-allocations`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shows", id, "retained-allocations"] });
+      invalidateShowCaches();
+      setAllocationMode("keep_separate");
+      setAllocationEditing(false);
+      toast({ title: "Allocations cleared" });
+    },
+  });
+
+  useEffect(() => {
+    if (retainedAllocations.length > 0 && !allocationEditing) {
+      if (retainedAllocations.length === 1) {
+        setAllocationMode("assign");
+        setAllocationMember(retainedAllocations[0].bandMemberId);
+      } else {
+        setAllocationMode("split");
+        setAllocationSelectedMembers(retainedAllocations.map(a => a.bandMemberId));
+        const amounts: Record<string, number> = {};
+        retainedAllocations.forEach(a => { amounts[a.bandMemberId] = a.amount; });
+        setAllocationManualAmounts(amounts);
+        setAllocationSplitMode("manual");
+      }
+    } else if (retainedAllocations.length === 0 && !allocationEditing) {
+      setAllocationMode("keep_separate");
+    }
+  }, [retainedAllocations, allocationEditing]);
 
   const addExpenseMutation = useMutation({
     mutationFn: (data: { description: string; amount: number }) =>
@@ -812,6 +872,321 @@ export default function ShowDetail() {
                   })()}
                 </div>
               )}
+
+              {show.status === "cancelled" && (() => {
+                const totalExp = expenses.reduce((s, e) => s + e.amount, 0);
+                const fundsRcvd = show.isPaid ? show.totalAmount : show.advancePayment;
+                const afterExp = Math.max(0, fundsRcvd - totalExp);
+                const retainedAmt = Math.max(0, afterExp - (show.refundAmount || 0));
+
+                if (retainedAmt <= 0) return null;
+
+                const computeAllocations = () => {
+                  if (allocationMode === "keep_separate") return [];
+                  if (allocationMode === "assign") {
+                    const bm = bandMembers.find(m => m.id === allocationMember);
+                    if (!bm) return [];
+                    return [{ bandMemberId: bm.id, memberName: bm.name, amount: retainedAmt }];
+                  }
+                  if (allocationMode === "split") {
+                    const selected = bandMembers.filter(m => allocationSelectedMembers.includes(m.id));
+                    if (selected.length === 0) return [];
+
+                    if (allocationSplitMode === "equal") {
+                      const base = Math.floor(retainedAmt / selected.length);
+                      const remainder = retainedAmt - (base * selected.length);
+                      return selected.map((m, i) => ({
+                        bandMemberId: m.id,
+                        memberName: m.name,
+                        amount: base + (i === 0 ? remainder : 0),
+                      }));
+                    }
+
+                    if (allocationSplitMode === "payout_rules") {
+                      let totalWeight = 0;
+                      const weights = selected.map(m => {
+                        let w = 0;
+                        if (m.paymentType === "percentage") {
+                          w = m.normalRate || 0;
+                        } else {
+                          w = m.normalRate || 0;
+                        }
+                        totalWeight += w;
+                        return { member: m, weight: w };
+                      });
+                      if (totalWeight === 0) {
+                        const base = Math.floor(retainedAmt / selected.length);
+                        const remainder = retainedAmt - (base * selected.length);
+                        return selected.map((m, i) => ({
+                          bandMemberId: m.id,
+                          memberName: m.name,
+                          amount: base + (i === 0 ? remainder : 0),
+                        }));
+                      }
+                      let allocated = 0;
+                      const results = weights.map((w, i) => {
+                        const amt = i === weights.length - 1
+                          ? retainedAmt - allocated
+                          : Math.round((w.weight / totalWeight) * retainedAmt);
+                        allocated += amt;
+                        return { bandMemberId: w.member.id, memberName: w.member.name, amount: amt };
+                      });
+                      return results;
+                    }
+
+                    if (allocationSplitMode === "manual") {
+                      return selected.map(m => ({
+                        bandMemberId: m.id,
+                        memberName: m.name,
+                        amount: allocationManualAmounts[m.id] || 0,
+                      }));
+                    }
+                  }
+                  return [];
+                };
+
+                const previewAllocations = allocationEditing ? computeAllocations() : [];
+                const previewTotal = previewAllocations.reduce((s, a) => s + a.amount, 0);
+                const existingTotal = retainedAllocations.reduce((s, a) => s + a.amount, 0);
+
+                const handleSaveAllocations = () => {
+                  if (allocationMode === "keep_separate") {
+                    clearAllocationsMutation.mutate();
+                    return;
+                  }
+                  const allocations = computeAllocations().filter(a => a.amount > 0);
+                  if (allocations.length === 0) {
+                    toast({ title: "No allocations", description: "Please select members and amounts", variant: "destructive" });
+                    return;
+                  }
+                  const total = allocations.reduce((s, a) => s + a.amount, 0);
+                  if (total > retainedAmt) {
+                    toast({ title: "Exceeds retained", description: `Total (Rs ${total.toLocaleString()}) exceeds retained amount (Rs ${retainedAmt.toLocaleString()})`, variant: "destructive" });
+                    return;
+                  }
+                  saveAllocationsMutation.mutate({ allocations });
+                };
+
+                const toggleSelectedMember = (memberId: string) => {
+                  setAllocationSelectedMembers(prev =>
+                    prev.includes(memberId) ? prev.filter(id => id !== memberId) : [...prev, memberId]
+                  );
+                };
+
+                return (
+                  <div className="border-t pt-5">
+                    <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <Calculator className="w-4 h-4 text-muted-foreground" />
+                        Retained Funds Allocation
+                      </h3>
+                      <Badge variant="outline" data-testid="badge-retained-amount">Rs {retainedAmt.toLocaleString()}</Badge>
+                    </div>
+
+                    {!allocationEditing && retainedAllocations.length === 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground" data-testid="text-retained-kept-separate">
+                          Kept separate - not assigned to any member
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAllocationEditing(true)}
+                          data-testid="button-allocate-retained"
+                        >
+                          Allocate Funds
+                        </Button>
+                      </div>
+                    )}
+
+                    {!allocationEditing && retainedAllocations.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="space-y-1">
+                          {retainedAllocations.map(a => (
+                            <div key={a.id} className="flex items-center justify-between gap-2 text-sm py-1" data-testid={`allocation-row-${a.bandMemberId}`}>
+                              <span>{a.memberName}</span>
+                              <span className="font-semibold">Rs {a.amount.toLocaleString()}</span>
+                            </div>
+                          ))}
+                          {existingTotal < retainedAmt && (
+                            <div className="flex items-center justify-between gap-2 text-sm py-1 text-muted-foreground">
+                              <span>Unallocated</span>
+                              <span>Rs {(retainedAmt - existingTotal).toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAllocationEditing(true)}
+                          data-testid="button-edit-allocation"
+                        >
+                          <Pencil className="w-3.5 h-3.5 mr-1" />
+                          Edit Allocation
+                        </Button>
+                      </div>
+                    )}
+
+                    {allocationEditing && (
+                      <div className="space-y-4">
+                        <RadioGroup
+                          value={allocationMode}
+                          onValueChange={(v) => setAllocationMode(v as any)}
+                          className="space-y-2"
+                          data-testid="radio-allocation-mode"
+                        >
+                          <div className="flex items-center gap-2">
+                            <RadioGroupItem value="keep_separate" id="alloc-separate" />
+                            <Label htmlFor="alloc-separate" className="text-sm cursor-pointer">Keep Separate</Label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <RadioGroupItem value="assign" id="alloc-assign" />
+                            <Label htmlFor="alloc-assign" className="text-sm cursor-pointer">Assign to Member</Label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <RadioGroupItem value="split" id="alloc-split" />
+                            <Label htmlFor="alloc-split" className="text-sm cursor-pointer">Split Between Members</Label>
+                          </div>
+                        </RadioGroup>
+
+                        {allocationMode === "assign" && (
+                          <div className="space-y-2">
+                            <Label className="text-xs text-muted-foreground">Select Member</Label>
+                            <Select value={allocationMember} onValueChange={setAllocationMember}>
+                              <SelectTrigger data-testid="select-allocation-member">
+                                <SelectValue placeholder="Choose member..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {bandMembers.map(bm => (
+                                  <SelectItem key={bm.id} value={bm.id}>{bm.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {allocationMember && (
+                              <p className="text-sm text-muted-foreground">
+                                Full Rs {retainedAmt.toLocaleString()} goes to {bandMembers.find(m => m.id === allocationMember)?.name}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {allocationMode === "split" && (
+                          <div className="space-y-3">
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-2 block">Select Members</Label>
+                              <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                                {bandMembers.map(bm => (
+                                  <div key={bm.id} className="flex items-center gap-2">
+                                    <Checkbox
+                                      id={`alloc-member-${bm.id}`}
+                                      checked={allocationSelectedMembers.includes(bm.id)}
+                                      onCheckedChange={() => toggleSelectedMember(bm.id)}
+                                      data-testid={`checkbox-alloc-member-${bm.id}`}
+                                    />
+                                    <Label htmlFor={`alloc-member-${bm.id}`} className="text-sm cursor-pointer">{bm.name}</Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {allocationSelectedMembers.length > 0 && (
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Split Method</Label>
+                                <RadioGroup
+                                  value={allocationSplitMode}
+                                  onValueChange={(v) => setAllocationSplitMode(v as any)}
+                                  className="space-y-1.5"
+                                  data-testid="radio-split-mode"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <RadioGroupItem value="equal" id="split-equal" />
+                                    <Label htmlFor="split-equal" className="text-sm cursor-pointer">Equal Split</Label>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <RadioGroupItem value="payout_rules" id="split-rules" />
+                                    <Label htmlFor="split-rules" className="text-sm cursor-pointer">According to Payout Rules</Label>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <RadioGroupItem value="manual" id="split-manual" />
+                                    <Label htmlFor="split-manual" className="text-sm cursor-pointer">Manual Amounts</Label>
+                                  </div>
+                                </RadioGroup>
+                              </div>
+                            )}
+
+                            {allocationSplitMode === "manual" && allocationSelectedMembers.length > 0 && (
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Enter amounts for each member</Label>
+                                {bandMembers.filter(m => allocationSelectedMembers.includes(m.id)).map(bm => (
+                                  <div key={bm.id} className="flex items-center gap-2">
+                                    <span className="text-sm flex-1 min-w-0 truncate">{bm.name}</span>
+                                    <Input
+                                      type="number"
+                                      className="w-[120px]"
+                                      value={allocationManualAmounts[bm.id] || ""}
+                                      onChange={(e) => setAllocationManualAmounts(prev => ({
+                                        ...prev,
+                                        [bm.id]: Number(e.target.value) || 0,
+                                      }))}
+                                      placeholder="Rs"
+                                      data-testid={`input-manual-amount-${bm.id}`}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {allocationSelectedMembers.length > 0 && (allocationSplitMode === "equal" || allocationSplitMode === "payout_rules") && (
+                              <div className="space-y-1 text-sm border rounded-md p-3">
+                                <p className="text-xs text-muted-foreground font-medium mb-1">Preview</p>
+                                {previewAllocations.map(a => (
+                                  <div key={a.bandMemberId} className="flex items-center justify-between gap-2">
+                                    <span>{a.memberName}</span>
+                                    <span className="font-semibold">Rs {a.amount.toLocaleString()}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {allocationMode === "split" && allocationSplitMode === "manual" && previewTotal > 0 && (
+                          <div className="flex items-center justify-between gap-2 text-sm border-t pt-2">
+                            <span className={previewTotal > retainedAmt ? "text-destructive" : "text-muted-foreground"}>
+                              Total: Rs {previewTotal.toLocaleString()} / Rs {retainedAmt.toLocaleString()}
+                            </span>
+                            {previewTotal < retainedAmt && (
+                              <span className="text-muted-foreground text-xs">
+                                Rs {(retainedAmt - previewTotal).toLocaleString()} unallocated
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2 pt-1 flex-wrap">
+                          <Button
+                            size="sm"
+                            onClick={handleSaveAllocations}
+                            disabled={saveAllocationsMutation.isPending || clearAllocationsMutation.isPending}
+                            data-testid="button-save-allocation"
+                          >
+                            {(saveAllocationsMutation.isPending || clearAllocationsMutation.isPending) && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setAllocationEditing(false)}
+                            data-testid="button-cancel-allocation"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

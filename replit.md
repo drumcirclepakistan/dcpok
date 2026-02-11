@@ -28,8 +28,9 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - Shows list highlights completed-but-unpaid shows in red "Action Required" section
 - Shows list highlights upcoming shows with no advance in orange "No Advance Received" section
 - Paid/Unpaid filter on shows list
-- **Cancelled shows**: Cancel/restore shows with optional cancellation reason; refund handling (non-refundable, partial refund with amount, complete refund); cancelled shows displayed in separate section on shows list; excluded from all earnings calculations; retained advance amount shown as "Cancelled Show Amount" on dashboard and added to total revenue
+- **Cancelled shows**: Cancel/restore shows with optional cancellation reason; expense-aware refund handling (available refund = funds received - expenses); refund types (non-refundable, partial refund with amount, complete refund); cancelled shows displayed in separate section on shows list; excluded from all earnings calculations; retained amount shown as "Cancelled Show Amount" on dashboard and added to total revenue
 - **Refund fields**: `refundType` (non_refundable/partial/complete) and `refundAmount` stored per cancelled show
+- **Retained fund allocation**: Retained funds from cancelled shows can be allocated to band members; three modes: Keep Separate (default), Assign to Member (full amount to one member), Split Between Members (equal, payout rules, or manual amounts); allocations stored in `retained_fund_allocations` table; allocated amounts included in member earnings on financials page; dashboard shows allocated/unallocated breakdown; allocations cleared when show is restored
 - Show expenses tracking with add/delete
 - Band member assignment per show from settings-defined members with automated payment calculations
 - **Manual amount override**: Each member in band section can have their calculated amount manually overridden via "Custom amount" checkbox
@@ -82,7 +83,7 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - Payment configs are editable per-member in Settings > Payment Configs
 
 ## Project Structure
-- `shared/schema.ts` - Drizzle schemas for users, shows, show_expenses, show_members, band_members, show_types, settings; Zod validation
+- `shared/schema.ts` - Drizzle schemas for users, shows, show_expenses, show_members, band_members, show_types, settings, retained_fund_allocations; Zod validation
 - `server/db.ts` - Database connection
 - `server/storage.ts` - Storage interface with DatabaseStorage implementation
 - `server/routes.ts` - API routes (auth + shows CRUD + expenses + members + band members + settings + dashboard + financials + show types)
@@ -110,6 +111,9 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - `PUT /api/shows/:id/members` - Replace all members for show (admin)
 - `POST /api/shows/:id/members` - Add member (admin)
 - `DELETE /api/shows/:id/members/:memberId` - Remove member (admin)
+- `GET /api/shows/:id/retained-allocations` - List retained fund allocations (admin)
+- `PUT /api/shows/:id/retained-allocations` - Save retained fund allocations (admin)
+- `DELETE /api/shows/:id/retained-allocations` - Clear retained fund allocations (admin)
 - `GET /api/dashboard/stats?from=&to=` - Aggregated dashboard stats (admin)
 - `GET /api/financials?member=&from=&to=` - Per-member financial stats (admin)
 - `GET /api/band-members` - List all band members (admin)
