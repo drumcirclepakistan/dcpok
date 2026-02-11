@@ -236,6 +236,7 @@ export async function registerRoutes(
       event_date TIMESTAMP NOT NULL,
       amount INTEGER NOT NULL,
       tax_mode tax_mode NOT NULL DEFAULT 'exclusive',
+      items TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT now(),
       user_id VARCHAR NOT NULL
     )
@@ -1796,11 +1797,16 @@ export async function registerRoutes(
       }
       if (search) {
         const q = search.toLowerCase();
-        filtered = filtered.filter(inv =>
-          inv.billTo.toLowerCase().includes(q) ||
-          inv.city.toLowerCase().includes(q) ||
-          inv.displayNumber.toLowerCase().includes(q)
-        );
+        filtered = filtered.filter(inv => {
+          if (inv.billTo.toLowerCase().includes(q) || inv.displayNumber.toLowerCase().includes(q) || inv.city.toLowerCase().includes(q)) return true;
+          if (inv.items) {
+            try {
+              const itemsList = JSON.parse(inv.items);
+              return itemsList.some((it: any) => it.city?.toLowerCase().includes(q));
+            } catch { return false; }
+          }
+          return false;
+        });
       }
       res.json(filtered);
     } catch (err: any) {
@@ -1814,18 +1820,28 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
       }
-      const { type, billTo, city, numberOfDrums, duration, eventDate, amount, taxMode } = parsed.data;
+      const { type, billTo, taxMode, items: parsedItems } = parsed.data;
+      const serializedItems = parsedItems.map((it: any) => ({
+        city: it.city,
+        numberOfDrums: it.numberOfDrums,
+        duration: it.duration,
+        eventDate: it.eventDate instanceof Date ? it.eventDate.toISOString() : it.eventDate,
+        amount: it.amount,
+      }));
+      const firstItem = serializedItems[0];
+      const totalAmount = serializedItems.reduce((sum: number, it: any) => sum + it.amount, 0);
       const nextNumber = await storage.getNextInvoiceNumber();
       const displayNumber = `DCP-${nextNumber}`;
       const invoice = await storage.createInvoice({
         type,
         billTo,
-        city,
-        numberOfDrums,
-        duration,
-        eventDate: eventDate instanceof Date ? eventDate : new Date(eventDate),
-        amount,
+        city: firstItem.city,
+        numberOfDrums: firstItem.numberOfDrums,
+        duration: firstItem.duration,
+        eventDate: new Date(firstItem.eventDate),
+        amount: totalAmount,
         taxMode: taxMode || "exclusive",
+        items: JSON.stringify(serializedItems),
         number: nextNumber,
         displayNumber,
         userId: req.session.userId!,
@@ -1853,15 +1869,25 @@ export async function registerRoutes(
       }
 
       const updateData: any = {};
-      const { type, billTo, city, numberOfDrums, duration, eventDate, amount, taxMode } = parsed.data;
+      const { type, billTo, taxMode, items: parsedItems } = parsed.data;
       if (type !== undefined) updateData.type = type;
       if (billTo !== undefined) updateData.billTo = billTo;
-      if (city !== undefined) updateData.city = city;
-      if (numberOfDrums !== undefined) updateData.numberOfDrums = numberOfDrums;
-      if (duration !== undefined) updateData.duration = duration;
-      if (eventDate !== undefined) updateData.eventDate = eventDate instanceof Date ? eventDate : new Date(String(eventDate));
-      if (amount !== undefined) updateData.amount = amount;
       if (taxMode !== undefined) updateData.taxMode = taxMode;
+      if (parsedItems !== undefined && parsedItems.length > 0) {
+        const serializedItems = parsedItems.map((it: any) => ({
+          city: it.city,
+          numberOfDrums: it.numberOfDrums,
+          duration: it.duration,
+          eventDate: it.eventDate instanceof Date ? it.eventDate.toISOString() : it.eventDate,
+          amount: it.amount,
+        }));
+        updateData.items = JSON.stringify(serializedItems);
+        updateData.city = serializedItems[0].city;
+        updateData.numberOfDrums = serializedItems[0].numberOfDrums;
+        updateData.duration = serializedItems[0].duration;
+        updateData.eventDate = new Date(serializedItems[0].eventDate);
+        updateData.amount = serializedItems.reduce((sum: number, it: any) => sum + it.amount, 0);
+      }
 
       const updated = await storage.updateInvoice(invoiceId, updateData);
       const user = await storage.getUser(req.session.userId!);

@@ -93,8 +93,8 @@ export interface IStorage {
   getInvoices(userId: string): Promise<Invoice[]>;
   getInvoice(id: string): Promise<Invoice | undefined>;
   getNextInvoiceNumber(): Promise<number>;
-  createInvoice(invoice: InsertInvoice & { userId: string; number: number; displayNumber: string }): Promise<Invoice>;
-  updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
+  createInvoice(invoice: Omit<Invoice, "id" | "createdAt"> & { id?: string; createdAt?: Date }): Promise<Invoice>;
+  updateInvoice(id: string, data: Partial<Omit<Invoice, "id" | "createdAt">>): Promise<Invoice | undefined>;
   deleteInvoice(id: string): Promise<boolean>;
 }
 
@@ -361,13 +361,13 @@ export class DatabaseStorage implements IStorage {
     return rows[0].number + 1;
   }
 
-  async createInvoice(invoice: InsertInvoice & { userId: string; number: number; displayNumber: string }): Promise<Invoice> {
-    const [created] = await db.insert(invoices).values(invoice).returning();
+  async createInvoice(invoice: Omit<Invoice, "id" | "createdAt"> & { id?: string; createdAt?: Date }): Promise<Invoice> {
+    const [created] = await db.insert(invoices).values(invoice as any).returning();
     return created;
   }
 
-  async updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined> {
-    const [updated] = await db.update(invoices).set(data).where(eq(invoices.id, id)).returning();
+  async updateInvoice(id: string, data: Partial<Omit<Invoice, "id" | "createdAt">>): Promise<Invoice | undefined> {
+    const [updated] = await db.update(invoices).set(data as any).where(eq(invoices.id, id)).returning();
     return updated;
   }
 

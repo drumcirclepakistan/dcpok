@@ -35,9 +35,10 @@ import {
   Calendar as CalendarIcon,
   Filter,
   Pencil,
+  X,
 } from "lucide-react";
 import { format } from "date-fns";
-import type { Invoice } from "@shared/schema";
+import type { Invoice, InvoiceItem } from "@shared/schema";
 import jsPDF from "jspdf";
 import { LOGO_BASE64 } from "@/lib/invoice-logo";
 
@@ -45,95 +46,125 @@ const BRAND_R = 237;
 const BRAND_G = 120;
 const BRAND_B = 37;
 
+function getInvoiceItems(invoice: Invoice): InvoiceItem[] {
+  if (invoice.items) {
+    try {
+      const parsed = JSON.parse(invoice.items);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {}
+  }
+  return [{
+    city: invoice.city,
+    numberOfDrums: invoice.numberOfDrums,
+    duration: invoice.duration,
+    eventDate: typeof invoice.eventDate === "string" ? invoice.eventDate : new Date(invoice.eventDate).toISOString(),
+    amount: invoice.amount,
+  }];
+}
+
 function generateInvoicePDF(invoice: Invoice) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = 210;
-  const marginLeft = 20;
-  const marginRight = 20;
+  const marginLeft = 18;
+  const marginRight = 18;
   const contentWidth = pageWidth - marginLeft - marginRight;
   const rightEdge = pageWidth - marginRight;
 
   const typeLabel = invoice.type === "invoice" ? "INVOICE" : "QUOTATION";
-  const eventDateStr = format(new Date(invoice.eventDate), "dd MMM yyyy");
   const createdDateStr = format(new Date(invoice.createdAt), "dd MMM yyyy");
-  const baseAmount = Number(invoice.amount);
-  const formattedAmount = `Rs ${baseAmount.toLocaleString()}`;
+  const items = getInvoiceItems(invoice);
+  const totalAmount = items.reduce((sum, it) => sum + it.amount, 0);
 
   doc.setFillColor(BRAND_R, BRAND_G, BRAND_B);
-  doc.rect(0, 0, pageWidth, 4, "F");
+  doc.rect(0, 0, pageWidth, 3.5, "F");
 
   try {
-    doc.addImage(LOGO_BASE64, "PNG", marginLeft, 10, 28, 28);
-  } catch {
-  }
+    const logoW = 24;
+    const logoH = 18;
+    doc.addImage(LOGO_BASE64, "PNG", marginLeft, 8, logoW, logoH);
+  } catch {}
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(24);
+  doc.setFontSize(22);
   doc.setTextColor(BRAND_R, BRAND_G, BRAND_B);
-  doc.text(typeLabel, rightEdge, 22, { align: "right" });
+  doc.text(typeLabel, rightEdge, 18, { align: "right" });
 
-  doc.setFontSize(10);
-  doc.setTextColor(120, 120, 120);
+  doc.setFontSize(9);
+  doc.setTextColor(110, 110, 110);
   doc.setFont("helvetica", "normal");
-  doc.text(invoice.displayNumber, rightEdge, 29, { align: "right" });
-  doc.text(`Date: ${createdDateStr}`, rightEdge, 35, { align: "right" });
+  doc.text(invoice.displayNumber, rightEdge, 24, { align: "right" });
+  doc.text(`Date: ${createdDateStr}`, rightEdge, 29, { align: "right" });
 
-  let y = 48;
+  let y = 36;
   doc.setDrawColor(BRAND_R, BRAND_G, BRAND_B);
-  doc.setLineWidth(0.6);
+  doc.setLineWidth(0.5);
   doc.line(marginLeft, y, rightEdge, y);
 
-  y += 10;
-  doc.setTextColor(120, 120, 120);
+  y += 7;
+  doc.setTextColor(110, 110, 110);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.text("BILL TO", marginLeft, y);
 
-  y += 6;
+  y += 5;
   doc.setTextColor(30, 30, 30);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(12);
   doc.text(invoice.billTo, marginLeft, y);
 
-  y += 14;
+  y += 9;
   doc.setFillColor(245, 245, 245);
-  doc.roundedRect(marginLeft, y, contentWidth, 9, 1.5, 1.5, "F");
-
+  doc.roundedRect(marginLeft, y, contentWidth, 7.5, 1, 1, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  doc.setFontSize(7.5);
   doc.setTextColor(80, 80, 80);
-  doc.text("DESCRIPTION", marginLeft + 4, y + 6);
-  doc.text("AMOUNT", rightEdge - 4, y + 6, { align: "right" });
+  doc.text("DESCRIPTION", marginLeft + 3, y + 5);
+  doc.text("AMOUNT", rightEdge - 3, y + 5, { align: "right" });
 
-  y += 14;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(50, 50, 50);
-  const description = `Drum Circle \u2013 ${invoice.city} \u2013 ${eventDateStr} \u2013 ${invoice.numberOfDrums} Drums \u2013 ${invoice.duration}`;
-  const descLines = doc.splitTextToSize(description, contentWidth - 50);
-  doc.text(descLines, marginLeft + 4, y);
+  y += 11;
 
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(30, 30, 30);
-  doc.text(formattedAmount, rightEdge - 4, y, { align: "right" });
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const eventDateStr = format(new Date(item.eventDate), "dd MMM yyyy");
+    const desc = `Drum Circle \u2013 ${item.city} \u2013 ${eventDateStr} \u2013 ${item.numberOfDrums} Drums \u2013 ${item.duration}`;
 
-  y += descLines.length * 5 + 8;
-  doc.setDrawColor(220, 220, 220);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(50, 50, 50);
+    const descLines = doc.splitTextToSize(desc, contentWidth - 45);
+    doc.text(descLines, marginLeft + 3, y);
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 30, 30);
+    doc.text(`Rs ${item.amount.toLocaleString()}`, rightEdge - 3, y, { align: "right" });
+
+    y += descLines.length * 4.2 + 3;
+
+    if (i < items.length - 1) {
+      doc.setDrawColor(230, 230, 230);
+      doc.setLineWidth(0.15);
+      doc.line(marginLeft + 3, y, rightEdge - 3, y);
+      y += 3;
+    }
+  }
+
+  y += 3;
+  doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.3);
   doc.line(marginLeft, y, rightEdge, y);
 
-  y += 8;
+  y += 5;
   doc.setFillColor(BRAND_R, BRAND_G, BRAND_B);
-  doc.roundedRect(rightEdge - 70, y - 2, 70, 10, 1.5, 1.5, "F");
+  doc.roundedRect(rightEdge - 65, y - 1, 65, 9, 1, 1, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text("TOTAL", rightEdge - 66, y + 5);
-  doc.text(formattedAmount, rightEdge - 4, y + 5, { align: "right" });
-
-  y += 16;
-  doc.setFont("helvetica", "italic");
   doc.setFontSize(9);
+  doc.setTextColor(255, 255, 255);
+  doc.text("TOTAL", rightEdge - 61, y + 5);
+  doc.text(`Rs ${totalAmount.toLocaleString()}`, rightEdge - 3, y + 5, { align: "right" });
+
+  y += 13;
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
   if (invoice.taxMode === "inclusive") {
     doc.text("All taxes inclusive.", marginLeft, y);
@@ -141,17 +172,17 @@ function generateInvoicePDF(invoice: Invoice) {
     doc.text("Exclusive of all taxes. Any applicable taxes will be charged separately.", marginLeft, y);
   }
 
-  y += 16;
+  y += 10;
   doc.setFillColor(BRAND_R, BRAND_G, BRAND_B);
-  doc.roundedRect(marginLeft, y - 1, contentWidth, 9, 1.5, 1.5, "F");
+  doc.roundedRect(marginLeft, y - 1, contentWidth, 7.5, 1, 1, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(8);
   doc.setTextColor(255, 255, 255);
-  doc.text("TERMS & REQUIREMENTS", marginLeft + 4, y + 5);
-  y += 14;
+  doc.text("TERMS & REQUIREMENTS", marginLeft + 3, y + 4.5);
+  y += 10;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(7.5);
   doc.setTextColor(60, 60, 60);
   const terms = [
     "The organizer shall provide a minimum of three (x3) microphones with three (x3) large microphone stands, along with one (x1) headset microphone and a functional sound system at the venue.",
@@ -167,37 +198,36 @@ function generateInvoicePDF(invoice: Invoice) {
   for (let i = 0; i < terms.length; i++) {
     const termText = `${i + 1}. ${terms[i]}`;
     const lines = doc.splitTextToSize(termText, contentWidth - 4);
-    if (y + lines.length * 4 > 270) {
+    if (y + lines.length * 3.5 > 268) {
       doc.addPage();
       doc.setFillColor(BRAND_R, BRAND_G, BRAND_B);
-      doc.rect(0, 0, pageWidth, 4, "F");
-      y = 16;
+      doc.rect(0, 0, pageWidth, 3.5, "F");
+      y = 14;
     }
-    doc.text(lines, marginLeft + 4, y);
-    y += lines.length * 4 + 3;
+    doc.text(lines, marginLeft + 3, y);
+    y += lines.length * 3.5 + 2;
   }
 
-  y += 8;
-  if (y > 230) {
+  y += 4;
+  if (y > 235) {
     doc.addPage();
     doc.setFillColor(BRAND_R, BRAND_G, BRAND_B);
-    doc.rect(0, 0, pageWidth, 4, "F");
-    y = 16;
+    doc.rect(0, 0, pageWidth, 3.5, "F");
+    y = 14;
   }
 
   doc.setDrawColor(220, 220, 220);
   doc.setLineWidth(0.3);
   doc.line(marginLeft, y, rightEdge, y);
-  y += 8;
+  y += 6;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(BRAND_R, BRAND_G, BRAND_B);
   doc.text("PAYMENT DETAILS", marginLeft, y);
-  y += 7;
+  y += 5;
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(7.5);
   doc.setTextColor(60, 60, 60);
   const bankDetails = [
     ["Account Title:", "Haider Jamil"],
@@ -208,30 +238,48 @@ function generateInvoicePDF(invoice: Invoice) {
   ];
   for (const [label, value] of bankDetails) {
     doc.setFont("helvetica", "bold");
-    doc.text(label, marginLeft + 4, y);
+    doc.text(label, marginLeft + 3, y);
     doc.setFont("helvetica", "normal");
-    doc.text(value, marginLeft + 30, y);
-    y += 5;
+    doc.text(value, marginLeft + 28, y);
+    y += 4;
   }
 
-  y += 10;
-  doc.setFillColor(BRAND_R, BRAND_G, BRAND_B);
-  doc.rect(0, y, pageWidth, 18, "F");
+  y += 6;
+  if (y > 278) {
+    doc.addPage();
+    doc.setFillColor(BRAND_R, BRAND_G, BRAND_B);
+    doc.rect(0, 0, pageWidth, 3.5, "F");
+    y = 14;
+  }
 
+  doc.setFillColor(BRAND_R, BRAND_G, BRAND_B);
+  doc.rect(0, y, pageWidth, 16, "F");
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setTextColor(255, 255, 255);
-  doc.text("+92 300 459 8500  |  drumcirclepakistan@gmail.com", pageWidth / 2, y + 7, { align: "center" });
-  doc.setFontSize(7);
-  doc.text("This document is system-generated and does not require manual authorization or signature.", pageWidth / 2, y + 13, { align: "center" });
+  doc.text("+92 300 459 8500  |  drumcirclepakistan@gmail.com", pageWidth / 2, y + 6, { align: "center" });
+  doc.setFontSize(6.5);
+  doc.text("This document is system-generated and does not require manual authorization or signature.", pageWidth / 2, y + 11, { align: "center" });
 
   return doc;
 }
 
 function downloadInvoicePDF(invoice: Invoice) {
   const doc = generateInvoicePDF(invoice);
-  const fileName = `${invoice.type === "invoice" ? "Invoice" : "Quotation"}_${invoice.billTo.replace(/\s+/g, "_")}_${invoice.city}_${format(new Date(invoice.createdAt), "dd-MMM-yyyy")}_${Date.now()}.pdf`;
+  const fileName = `${invoice.type === "invoice" ? "Invoice" : "Quotation"}_${invoice.billTo.replace(/\s+/g, "_")}_${format(new Date(invoice.createdAt), "dd-MMM-yyyy")}_${Date.now()}.pdf`;
   doc.save(fileName);
+}
+
+interface ShowItemForm {
+  city: string;
+  numberOfDrums: string;
+  duration: string;
+  eventDate: Date | undefined;
+  amount: string;
+}
+
+function emptyItem(): ShowItemForm {
+  return { city: "", numberOfDrums: "", duration: "", eventDate: undefined, amount: "" };
 }
 
 export default function InvoiceGeneratorPage() {
@@ -243,13 +291,8 @@ export default function InvoiceGeneratorPage() {
 
   const [formType, setFormType] = useState<"invoice" | "quotation">("invoice");
   const [billTo, setBillTo] = useState("");
-  const [city, setCity] = useState("");
-  const [numberOfDrums, setNumberOfDrums] = useState("");
-  const [duration, setDuration] = useState("");
-  const [eventDate, setEventDate] = useState<Date | undefined>();
-  const [amount, setAmount] = useState("");
   const [taxMode, setTaxMode] = useState<"inclusive" | "exclusive">("exclusive");
-  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [showItems, setShowItems] = useState<ShowItemForm[]>([emptyItem()]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data: invoicesList, isLoading } = useQuery<Invoice[]>({
@@ -310,41 +353,63 @@ export default function InvoiceGeneratorPage() {
     setEditingInvoice(null);
     setFormType("invoice");
     setBillTo("");
-    setCity("");
-    setNumberOfDrums("");
-    setDuration("");
-    setEventDate(undefined);
-    setAmount("");
     setTaxMode("exclusive");
+    setShowItems([emptyItem()]);
   }
 
   function startEdit(inv: Invoice) {
     setEditingInvoice(inv);
     setFormType(inv.type);
     setBillTo(inv.billTo);
-    setCity(inv.city);
-    setNumberOfDrums(String(inv.numberOfDrums));
-    setDuration(inv.duration);
-    setEventDate(new Date(inv.eventDate));
-    setAmount(String(inv.amount));
     setTaxMode(inv.taxMode);
+    const items = getInvoiceItems(inv);
+    setShowItems(items.map(it => ({
+      city: it.city,
+      numberOfDrums: String(it.numberOfDrums),
+      duration: it.duration,
+      eventDate: new Date(it.eventDate),
+      amount: String(it.amount),
+    })));
     setShowForm(true);
   }
 
+  function updateItem(index: number, field: keyof ShowItemForm, value: any) {
+    setShowItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item));
+  }
+
+  function addItem() {
+    setShowItems(prev => [...prev, emptyItem()]);
+  }
+
+  function removeItem(index: number) {
+    if (showItems.length <= 1) return;
+    setShowItems(prev => prev.filter((_, i) => i !== index));
+  }
+
   function handleSubmit() {
-    if (!billTo || !city || !numberOfDrums || !duration || !eventDate || !amount) {
-      toast({ title: "Please fill all fields", variant: "destructive" });
+    if (!billTo) {
+      toast({ title: "Please enter client name", variant: "destructive" });
       return;
     }
+    for (let i = 0; i < showItems.length; i++) {
+      const it = showItems[i];
+      if (!it.city || !it.numberOfDrums || !it.duration || !it.eventDate || !it.amount) {
+        toast({ title: `Please fill all fields for Show ${i + 1}`, variant: "destructive" });
+        return;
+      }
+    }
+
     const payload = {
       type: formType,
       billTo,
-      city,
-      numberOfDrums: parseInt(numberOfDrums),
-      duration,
-      eventDate: eventDate.toISOString(),
-      amount: parseInt(amount),
       taxMode,
+      items: showItems.map(it => ({
+        city: it.city,
+        numberOfDrums: parseInt(it.numberOfDrums),
+        duration: it.duration,
+        eventDate: it.eventDate!.toISOString(),
+        amount: parseInt(it.amount),
+      })),
     };
 
     if (editingInvoice) {
@@ -354,19 +419,49 @@ export default function InvoiceGeneratorPage() {
     }
   }
 
+  function buildPreviewInvoice(): Invoice {
+    const items = showItems.map(it => ({
+      city: it.city || "City",
+      numberOfDrums: parseInt(it.numberOfDrums) || 0,
+      duration: it.duration || "TBD",
+      eventDate: it.eventDate ? it.eventDate.toISOString() : new Date().toISOString(),
+      amount: parseInt(it.amount) || 0,
+    }));
+    const totalAmount = items.reduce((s, it) => s + it.amount, 0);
+    return {
+      ...(editingInvoice || {
+        id: "preview",
+        number: 0,
+        displayNumber: "DCP-XXXX",
+        createdAt: new Date(),
+        userId: "",
+      }),
+      type: formType,
+      billTo: billTo || "Client Name",
+      city: items[0].city,
+      numberOfDrums: items[0].numberOfDrums,
+      duration: items[0].duration,
+      eventDate: new Date(items[0].eventDate),
+      amount: totalAmount,
+      taxMode,
+      items: JSON.stringify(items),
+    } as Invoice;
+  }
+
   const filtered = useMemo(() => {
     if (!invoicesList) return [];
     if (!search) return invoicesList;
     const q = search.toLowerCase();
-    return invoicesList.filter(
-      (inv) =>
-        inv.billTo.toLowerCase().includes(q) ||
-        inv.city.toLowerCase().includes(q) ||
-        inv.displayNumber.toLowerCase().includes(q)
-    );
+    return invoicesList.filter((inv) => {
+      if (inv.billTo.toLowerCase().includes(q) || inv.displayNumber.toLowerCase().includes(q) || inv.city.toLowerCase().includes(q)) return true;
+      const items = getInvoiceItems(inv);
+      return items.some(it => it.city.toLowerCase().includes(q));
+    });
   }, [invoicesList, search]);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const formTotal = showItems.reduce((sum, it) => sum + (parseInt(it.amount) || 0), 0);
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
@@ -386,16 +481,14 @@ export default function InvoiceGeneratorPage() {
       {showForm && (
         <Card>
           <CardContent className="pt-5 space-y-4">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-base font-semibold">
-                {editingInvoice
-                  ? `Edit ${editingInvoice.displayNumber}`
-                  : `New ${formType === "invoice" ? "Invoice" : "Quotation"}`}
-              </h2>
-            </div>
+            <h2 className="text-base font-semibold">
+              {editingInvoice
+                ? `Edit ${editingInvoice.displayNumber}`
+                : `New ${formType === "invoice" ? "Invoice" : "Quotation"}`}
+            </h2>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
+              <div>
                 <Label>Type</Label>
                 <Select value={formType} onValueChange={(v) => setFormType(v as any)}>
                   <SelectTrigger data-testid="select-type">
@@ -406,75 +499,6 @@ export default function InvoiceGeneratorPage() {
                     <SelectItem value="quotation">Quotation</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="col-span-2">
-                <Label>Bill To / Client Name</Label>
-                <Input
-                  value={billTo}
-                  onChange={(e) => setBillTo(e.target.value)}
-                  placeholder="e.g. Unilever Pakistan"
-                  data-testid="input-bill-to"
-                />
-              </div>
-              <div>
-                <Label>City</Label>
-                <Input
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="e.g. Lahore"
-                  data-testid="input-city"
-                />
-              </div>
-              <div>
-                <Label>No. of Drums</Label>
-                <Input
-                  type="number"
-                  value={numberOfDrums}
-                  onChange={(e) => setNumberOfDrums(e.target.value)}
-                  placeholder="e.g. 60"
-                  data-testid="input-drums"
-                />
-              </div>
-              <div>
-                <Label>Duration</Label>
-                <Input
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  placeholder="e.g. 45 to 60 Mins"
-                  data-testid="input-duration"
-                />
-              </div>
-              <div>
-                <Label>Event Date</Label>
-                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
-                      data-testid="button-event-date"
-                    >
-                      <CalendarIcon className="w-4 h-4 mr-2" />
-                      {eventDate ? format(eventDate, "dd MMM yyyy") : "Pick a date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={eventDate}
-                      onSelect={(d) => { setEventDate(d); setDatePickerOpen(false); }}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div>
-                <Label>Amount (Rs)</Label>
-                <Input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="e.g. 500000"
-                  data-testid="input-amount"
-                />
               </div>
               <div>
                 <Label>Tax Mode</Label>
@@ -488,22 +512,114 @@ export default function InvoiceGeneratorPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="col-span-2">
+                <Label>Bill To / Client Name</Label>
+                <Input
+                  value={billTo}
+                  onChange={(e) => setBillTo(e.target.value)}
+                  placeholder="e.g. Unilever Pakistan"
+                  data-testid="input-bill-to"
+                />
+              </div>
             </div>
+
+            <div className="space-y-3">
+              {showItems.map((item, idx) => (
+                <div key={idx} className="border rounded-md p-3 space-y-2 relative">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Show {idx + 1}
+                    </span>
+                    {showItems.length > 1 && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => removeItem(idx)}
+                        data-testid={`button-remove-item-${idx}`}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">City</Label>
+                      <Input
+                        value={item.city}
+                        onChange={(e) => updateItem(idx, "city", e.target.value)}
+                        placeholder="e.g. Lahore"
+                        data-testid={`input-city-${idx}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Drums</Label>
+                      <Input
+                        type="number"
+                        value={item.numberOfDrums}
+                        onChange={(e) => updateItem(idx, "numberOfDrums", e.target.value)}
+                        placeholder="e.g. 60"
+                        data-testid={`input-drums-${idx}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Duration</Label>
+                      <Input
+                        value={item.duration}
+                        onChange={(e) => updateItem(idx, "duration", e.target.value)}
+                        placeholder="e.g. 45 to 60 Mins"
+                        data-testid={`input-duration-${idx}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Event Date</Label>
+                      <ItemDatePicker
+                        date={item.eventDate}
+                        onSelect={(d) => updateItem(idx, "eventDate", d)}
+                        testId={`button-event-date-${idx}`}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs">Amount (Rs)</Label>
+                      <Input
+                        type="number"
+                        value={item.amount}
+                        onChange={(e) => updateItem(idx, "amount", e.target.value)}
+                        placeholder="e.g. 500000"
+                        data-testid={`input-amount-${idx}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <Button variant="outline" className="w-full" onClick={addItem} data-testid="button-add-show">
+                <Plus className="w-4 h-4 mr-1" />
+                Add Another Show
+              </Button>
+            </div>
+
+            {formTotal > 0 && (
+              <div className="text-sm font-medium text-right">
+                Total: Rs {formTotal.toLocaleString()}
+                {showItems.length > 1 && (
+                  <span className="text-muted-foreground font-normal ml-1">
+                    ({showItems.length} shows)
+                  </span>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-2 justify-end flex-wrap">
               <Button variant="outline" onClick={resetForm} data-testid="button-cancel-form">
                 Cancel
               </Button>
-              {editingInvoice && (
-                <Button
-                  variant="outline"
-                  onClick={() => downloadInvoicePDF({ ...editingInvoice, type: formType, billTo, city, numberOfDrums: parseInt(numberOfDrums) || 0, duration, eventDate: eventDate ? eventDate.toISOString() : editingInvoice.eventDate, amount: parseInt(amount) || 0, taxMode } as Invoice)}
-                  data-testid="button-preview-pdf"
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Preview PDF
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                onClick={() => downloadInvoicePDF(buildPreviewInvoice())}
+                data-testid="button-preview-pdf"
+              >
+                <Download className="w-4 h-4 mr-1" />
+                Preview PDF
+              </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={isPending}
@@ -570,102 +686,142 @@ export default function InvoiceGeneratorPage() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {filtered.map((inv) => (
-              <Card key={inv.id} data-testid={`card-invoice-${inv.id}`}>
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm" data-testid={`text-invoice-number-${inv.id}`}>
-                          {inv.displayNumber}
-                        </span>
-                        <Badge variant={inv.type === "invoice" ? "default" : "secondary"}>
-                          {inv.type === "invoice" ? "Invoice" : "Quotation"}
-                        </Badge>
-                        <Badge variant="outline" className="text-[10px]">
-                          {inv.taxMode === "inclusive" ? "Taxes Inclusive" : "Taxes Exclusive"}
-                        </Badge>
+            {filtered.map((inv) => {
+              const items = getInvoiceItems(inv);
+              const totalAmount = items.reduce((s, it) => s + it.amount, 0);
+              const cities = Array.from(new Set(items.map(it => it.city))).join(", ");
+
+              return (
+                <Card key={inv.id} data-testid={`card-invoice-${inv.id}`}>
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm" data-testid={`text-invoice-number-${inv.id}`}>
+                            {inv.displayNumber}
+                          </span>
+                          <Badge variant={inv.type === "invoice" ? "default" : "secondary"}>
+                            {inv.type === "invoice" ? "Invoice" : "Quotation"}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px]">
+                            {inv.taxMode === "inclusive" ? "Taxes Inclusive" : "Taxes Exclusive"}
+                          </Badge>
+                          {items.length > 1 && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {items.length} shows
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm mt-0.5" data-testid={`text-invoice-client-${inv.id}`}>
+                          {inv.billTo}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-xs text-muted-foreground">{cities}</span>
+                          {items.length === 1 && (
+                            <>
+                              <span className="text-xs text-muted-foreground">
+                                Event: {format(new Date(items[0].eventDate), "dd MMM yyyy")}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {items[0].numberOfDrums} drums
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Created: {format(new Date(inv.createdAt), "dd MMM yyyy")}
+                        </p>
                       </div>
-                      <p className="text-sm mt-0.5" data-testid={`text-invoice-client-${inv.id}`}>
-                        {inv.billTo}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-xs text-muted-foreground">{inv.city}</span>
-                        <span className="text-xs text-muted-foreground">
-                          Event: {format(new Date(inv.eventDate), "dd MMM yyyy")}
+                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                        <span className="text-sm font-semibold" data-testid={`text-invoice-amount-${inv.id}`}>
+                          Rs {totalAmount.toLocaleString()}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          {inv.numberOfDrums} drums
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Created: {format(new Date(inv.createdAt), "dd MMM yyyy")}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                      <span className="text-sm font-semibold" data-testid={`text-invoice-amount-${inv.id}`}>
-                        Rs {Number(inv.amount).toLocaleString()}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          onClick={() => startEdit(inv)}
-                          data-testid={`button-edit-${inv.id}`}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => downloadInvoicePDF(inv)}
-                          data-testid={`button-download-${inv.id}`}
-                        >
-                          <Download className="w-3.5 h-3.5 mr-1" />
-                          PDF
-                        </Button>
-                        <Dialog open={deleteId === inv.id} onOpenChange={(open) => !open && setDeleteId(null)}>
-                          <DialogTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              onClick={() => setDeleteId(inv.id)}
-                              data-testid={`button-delete-${inv.id}`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-sm">
-                            <DialogHeader>
-                              <DialogTitle>Delete {inv.type === "invoice" ? "Invoice" : "Quotation"}?</DialogTitle>
-                            </DialogHeader>
-                            <p className="text-sm text-muted-foreground">
-                              This will permanently delete {inv.displayNumber} for {inv.billTo}.
-                            </p>
-                            <DialogFooter className="gap-2">
-                              <DialogClose asChild>
-                                <Button variant="outline">Cancel</Button>
-                              </DialogClose>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={() => startEdit(inv)}
+                            data-testid={`button-edit-${inv.id}`}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => downloadInvoicePDF(inv)}
+                            data-testid={`button-download-${inv.id}`}
+                          >
+                            <Download className="w-3.5 h-3.5 mr-1" />
+                            PDF
+                          </Button>
+                          <Dialog open={deleteId === inv.id} onOpenChange={(open) => !open && setDeleteId(null)}>
+                            <DialogTrigger asChild>
                               <Button
-                                variant="destructive"
-                                onClick={() => deleteMutation.mutate(inv.id)}
-                                disabled={deleteMutation.isPending}
-                                data-testid="button-confirm-delete"
+                                size="icon"
+                                variant="outline"
+                                onClick={() => setDeleteId(inv.id)}
+                                data-testid={`button-delete-${inv.id}`}
                               >
-                                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                                <Trash2 className="w-3.5 h-3.5" />
                               </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-sm">
+                              <DialogHeader>
+                                <DialogTitle>Delete {inv.type === "invoice" ? "Invoice" : "Quotation"}?</DialogTitle>
+                              </DialogHeader>
+                              <p className="text-sm text-muted-foreground">
+                                This will permanently delete {inv.displayNumber} for {inv.billTo}.
+                              </p>
+                              <DialogFooter className="gap-2">
+                                <DialogClose asChild>
+                                  <Button variant="outline">Cancel</Button>
+                                </DialogClose>
+                                <Button
+                                  variant="destructive"
+                                  onClick={() => deleteMutation.mutate(inv.id)}
+                                  disabled={deleteMutation.isPending}
+                                  data-testid="button-confirm-delete"
+                                >
+                                  {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function ItemDatePicker({ date, onSelect, testId }: { date: Date | undefined; onSelect: (d: Date | undefined) => void; testId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="w-full justify-start text-left font-normal"
+          data-testid={testId}
+        >
+          <CalendarIcon className="w-4 h-4 mr-2" />
+          {date ? format(date, "dd MMM yyyy") : "Pick a date"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={date}
+          onSelect={(d) => { onSelect(d); setOpen(false); }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }

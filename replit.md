@@ -56,7 +56,7 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - **In-app notifications**: Bell icon in header with unread count badge; notifications for show assignments (added/removed), member-created shows; mark individual or all as read
 - **Activity log**: Admin-only page tracking logins, show CRUD, paid/unpaid toggles, band member updates with timestamps
 - **Email notifications**: Uses Resend API for show assignment emails (requires RESEND_API_KEY secret)
-- **Invoice Generator**: Admin-only system for creating invoices/quotations with client-side PDF generation (jsPDF); auto-incrementing numbers starting from DCP-4848; form with type/billTo/city/drums/duration/eventDate/amount/taxMode; list with search/filter/download/delete; PDF includes terms & bank details
+- **Invoice Generator**: Admin-only system for creating invoices/quotations with client-side PDF generation (jsPDF); auto-incrementing numbers starting from DCP-4848; supports multiple shows per invoice (each with city/drums/duration/eventDate/amount); form with type/billTo/taxMode and dynamic show items; list with search/filter/download/delete; PDF includes Drum Circle Pakistan logo, orange branding (#ED7825), terms & bank details; items stored as JSON in `items` TEXT column with backward-compatible flat fields
 
 ## Member-Facing Interface
 - Members log in with accounts created by admin (Settings > Band Members > Create Account)

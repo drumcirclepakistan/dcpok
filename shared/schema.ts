@@ -248,6 +248,22 @@ export interface PayoutConfig {
 export const invoiceTypeEnum = pgEnum("invoice_type", ["invoice", "quotation"]);
 export const taxModeEnum = pgEnum("tax_mode", ["inclusive", "exclusive"]);
 
+export const invoiceItemSchema = z.object({
+  city: z.string().min(1),
+  numberOfDrums: z.union([z.number(), z.string()]).transform((val) => (typeof val === "string" ? parseInt(val, 10) : val)),
+  duration: z.string().min(1),
+  eventDate: z.union([z.date(), z.string()]).transform((val) => (typeof val === "string" ? new Date(val) : val)),
+  amount: z.union([z.number(), z.string()]).transform((val) => (typeof val === "string" ? parseInt(val, 10) : val)),
+});
+
+export type InvoiceItem = {
+  city: string;
+  numberOfDrums: number;
+  duration: string;
+  eventDate: string;
+  amount: number;
+};
+
 export const invoices = pgTable("invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   type: invoiceTypeEnum("type").notNull(),
@@ -260,20 +276,16 @@ export const invoices = pgTable("invoices", {
   eventDate: timestamp("event_date").notNull(),
   amount: integer("amount").notNull(),
   taxMode: taxModeEnum("tax_mode").notNull().default("exclusive"),
+  items: text("items"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   userId: varchar("user_id").notNull(),
 });
 
-export const insertInvoiceSchema = createInsertSchema(invoices).omit({
-  id: true,
-  createdAt: true,
-  userId: true,
-  number: true,
-  displayNumber: true,
-}).extend({
-  eventDate: z.union([z.date(), z.string()]).transform((val) => (typeof val === "string" ? new Date(val) : val)),
-  numberOfDrums: z.union([z.number(), z.string()]).transform((val) => (typeof val === "string" ? parseInt(val, 10) : val)),
-  amount: z.union([z.number(), z.string()]).transform((val) => (typeof val === "string" ? parseInt(val, 10) : val)),
+export const insertInvoiceSchema = z.object({
+  type: z.enum(["invoice", "quotation"]),
+  billTo: z.string().min(1),
+  taxMode: z.enum(["inclusive", "exclusive"]).default("exclusive"),
+  items: z.array(invoiceItemSchema).min(1),
 });
 
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
