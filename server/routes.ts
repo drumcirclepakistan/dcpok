@@ -821,22 +821,28 @@ export async function registerRoutes(
       const retainedAllocDetails: { showId: string; showTitle: string; amount: number }[] = [];
 
       if (member) {
-        const targetBandMember = allBandMembersForAlloc.find(bm => bm.name === member);
-        if (targetBandMember) {
-          const memberAllocations = allAllocations.filter(a => a.bandMemberId === targetBandMember.id);
-          for (const alloc of memberAllocations) {
-            const cancelledShow = allShows.find(s => s.id === alloc.showId && s.status === "cancelled");
-            if (cancelledShow) {
-              const showDate = new Date(cancelledShow.showDate);
-              if (from && showDate < new Date(from)) continue;
-              if (to && showDate > new Date(to)) continue;
-              retainedFundsEarnings += alloc.amount;
-              retainedAllocDetails.push({
-                showId: cancelledShow.id,
-                showTitle: cancelledShow.title,
-                amount: alloc.amount,
-              });
-            }
+        let targetBandMemberIds: string[] = [];
+        if (member === "Haider Jamil") {
+          targetBandMemberIds = ["founder"];
+        } else {
+          const targetBandMember = allBandMembersForAlloc.find(bm => bm.name === member);
+          if (targetBandMember) {
+            targetBandMemberIds = [targetBandMember.id];
+          }
+        }
+        const memberAllocations = allAllocations.filter(a => targetBandMemberIds.includes(a.bandMemberId));
+        for (const alloc of memberAllocations) {
+          const cancelledShow = allShows.find(s => s.id === alloc.showId && s.status === "cancelled");
+          if (cancelledShow) {
+            const showDate = new Date(cancelledShow.showDate);
+            if (from && showDate < new Date(from)) continue;
+            if (to && showDate > new Date(to)) continue;
+            retainedFundsEarnings += alloc.amount;
+            retainedAllocDetails.push({
+              showId: cancelledShow.id,
+              showTitle: cancelledShow.title,
+              amount: alloc.amount,
+            });
           }
         }
       }

@@ -101,6 +101,13 @@ export default function ShowDetail() {
     enabled: !!id && show?.status === "cancelled",
   });
 
+  const FOUNDER_ID = "founder";
+  const FOUNDER_NAME = "Haider Jamil";
+  const allocationMembers = useMemo(() => {
+    const founderEntry = { id: FOUNDER_ID, name: FOUNDER_NAME, paymentType: "percentage" as const, normalRate: 0, referralRate: 0, hasMinLogic: false, minThreshold: 0, minFlatRate: 0 };
+    return [founderEntry, ...bandMembers];
+  }, [bandMembers]);
+
   const bandMemberConfigMap = useMemo(() => {
     const map: Record<string, BandMemberConfig> = {};
     for (const bm of bandMembers) {
@@ -884,12 +891,12 @@ export default function ShowDetail() {
                 const computeAllocations = () => {
                   if (allocationMode === "keep_separate") return [];
                   if (allocationMode === "assign") {
-                    const bm = bandMembers.find(m => m.id === allocationMember);
+                    const bm = allocationMembers.find(m => m.id === allocationMember);
                     if (!bm) return [];
                     return [{ bandMemberId: bm.id, memberName: bm.name, amount: retainedAmt }];
                   }
                   if (allocationMode === "split") {
-                    const selected = bandMembers.filter(m => allocationSelectedMembers.includes(m.id));
+                    const selected = allocationMembers.filter(m => allocationSelectedMembers.includes(m.id));
                     if (selected.length === 0) return [];
 
                     if (allocationSplitMode === "equal") {
@@ -1057,14 +1064,14 @@ export default function ShowDetail() {
                                 <SelectValue placeholder="Choose member..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {bandMembers.map(bm => (
+                                {allocationMembers.map(bm => (
                                   <SelectItem key={bm.id} value={bm.id}>{bm.name}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                             {allocationMember && (
                               <p className="text-sm text-muted-foreground">
-                                Full Rs {retainedAmt.toLocaleString()} goes to {bandMembers.find(m => m.id === allocationMember)?.name}
+                                Full Rs {retainedAmt.toLocaleString()} goes to {allocationMembers.find(m => m.id === allocationMember)?.name}
                               </p>
                             )}
                           </div>
@@ -1075,7 +1082,7 @@ export default function ShowDetail() {
                             <div>
                               <Label className="text-xs text-muted-foreground mb-2 block">Select Members</Label>
                               <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                                {bandMembers.map(bm => (
+                                {allocationMembers.map(bm => (
                                   <div key={bm.id} className="flex items-center gap-2">
                                     <Checkbox
                                       id={`alloc-member-${bm.id}`}
@@ -1117,7 +1124,7 @@ export default function ShowDetail() {
                             {allocationSplitMode === "manual" && allocationSelectedMembers.length > 0 && (
                               <div className="space-y-2">
                                 <Label className="text-xs text-muted-foreground">Enter amounts for each member</Label>
-                                {bandMembers.filter(m => allocationSelectedMembers.includes(m.id)).map(bm => (
+                                {allocationMembers.filter(m => allocationSelectedMembers.includes(m.id)).map(bm => (
                                   <div key={bm.id} className="flex items-center gap-2">
                                     <span className="text-sm flex-1 min-w-0 truncate">{bm.name}</span>
                                     <Input
