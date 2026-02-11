@@ -132,8 +132,9 @@ export default function DirectoryPage() {
     const totalShows = searchResults.length;
     const paid = searchResults.filter((s) => s.isPaid).length;
     const unpaid = totalShows - paid;
-    const completed = searchResults.filter((s) => s.status === "completed" || new Date(s.showDate) < new Date()).length;
-    const upcoming = totalShows - completed;
+    const nonCancelled = searchResults.filter((s) => s.status !== "cancelled");
+    const completed = nonCancelled.filter((s) => new Date(s.showDate) <= new Date()).length;
+    const upcoming = nonCancelled.filter((s) => new Date(s.showDate) > new Date()).length;
     const totalRevenue = searchResults.reduce((sum, s) => sum + s.totalAmount, 0);
 
     const typeBreakdown: Record<string, number> = {};
