@@ -219,6 +219,23 @@ export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
 export type ActivityLog = typeof activityLogs.$inferSelect;
 
+export const retainedFundAllocations = pgTable("retained_fund_allocations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  showId: varchar("show_id").notNull(),
+  bandMemberId: varchar("band_member_id").notNull(),
+  memberName: text("member_name").notNull(),
+  amount: integer("amount").notNull(),
+});
+
+export const insertRetainedFundAllocationSchema = createInsertSchema(retainedFundAllocations).omit({
+  id: true,
+}).extend({
+  amount: z.coerce.number().min(0, "Amount must be positive"),
+});
+
+export type InsertRetainedFundAllocation = z.infer<typeof insertRetainedFundAllocationSchema>;
+export type RetainedFundAllocation = typeof retainedFundAllocations.$inferSelect;
+
 export interface PayoutConfig {
   referralRate?: number | null;
   hasMinLogic?: boolean;
