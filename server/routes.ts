@@ -276,6 +276,7 @@ export async function registerRoutes(
         canAddShows: bandMember?.canAddShows || false,
         canEditName: bandMember?.canEditName || false,
         canViewAmounts: bandMember?.canViewAmounts || false,
+        canShowContacts: bandMember?.canShowContacts || false,
       });
     }
     res.json(safeUser);
@@ -1039,6 +1040,11 @@ export async function registerRoutes(
             numberOfDrums: show.numberOfDrums,
             location: show.location,
             isReferrer: found.isReferrer,
+            ...(member.canShowContacts ? {
+              pocName: show.pocName,
+              pocPhone: show.pocPhone,
+              pocEmail: show.pocEmail,
+            } : {}),
           });
         }
       }
@@ -1122,6 +1128,12 @@ export async function registerRoutes(
           status: show.status,
           totalAmount: member.canViewAmounts ? show.totalAmount : undefined,
           isReferrer: found.isReferrer,
+          location: show.location,
+          ...(member.canShowContacts ? {
+            pocName: show.pocName,
+            pocPhone: show.pocPhone,
+            pocEmail: show.pocEmail,
+          } : {}),
         };
 
         if (isUpcoming) {

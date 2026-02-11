@@ -279,7 +279,7 @@ export default function SettingsPage() {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string; role?: string; customRole?: string | null; canAddShows?: boolean; canEditName?: boolean; canViewAmounts?: boolean; email?: string | null }) =>
+    mutationFn: ({ id, ...data }: { id: string; name?: string; role?: string; customRole?: string | null; canAddShows?: boolean; canEditName?: boolean; canViewAmounts?: boolean; canShowContacts?: boolean; email?: string | null }) =>
       apiRequest("PATCH", `/api/band-members/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/band-members"] });
@@ -355,6 +355,8 @@ export default function SettingsPage() {
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState("");
   const [editCustomRole, setEditCustomRole] = useState("");
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
   // Show types management
   const [newTypeName, setNewTypeName] = useState("");
@@ -436,7 +438,7 @@ export default function SettingsPage() {
         title="Payment Configs"
         icon={DollarSign}
         description="Per-member payment rules used in payout calculations"
-        defaultOpen={true}
+        defaultOpen={false}
         testId="payment-configs"
       >
         <div className="space-y-3">
@@ -626,7 +628,7 @@ export default function SettingsPage() {
         title="Band Members"
         icon={Users}
         description="Manage members, roles, and login accounts"
-        defaultOpen={true}
+        defaultOpen={false}
         testId="band-members"
       >
         <div className="space-y-3">
@@ -634,7 +636,51 @@ export default function SettingsPage() {
             <div key={member.id} className="p-3 border rounded-md space-y-2" data-testid={`band-member-${member.id}`}>
               <div className="flex items-start justify-between gap-2 flex-wrap">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">{member.name}</p>
+                  {editingNameId === member.id ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Member name"
+                        className="w-[180px]"
+                        data-testid={`input-edit-name-${member.id}`}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && editName.trim()) {
+                            updateRoleMutation.mutate({ id: member.id, name: editName.trim() });
+                            setEditingNameId(null);
+                          }
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (editName.trim()) {
+                            updateRoleMutation.mutate({ id: member.id, name: editName.trim() });
+                            setEditingNameId(null);
+                          }
+                        }}
+                        data-testid={`button-save-name-${member.id}`}
+                      >
+                        Save
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingNameId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium">{member.name}</p>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => { setEditingNameId(member.id); setEditName(member.name); }}
+                        data-testid={`button-edit-name-${member.id}`}
+                        className="h-6 w-6"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <Badge variant="secondary" className="text-[10px]">
                       {getRoleLabel(member.role, member.customRole)}
@@ -763,6 +809,19 @@ export default function SettingsPage() {
                         data-testid={`switch-can-view-amounts-${member.id}`}
                       />
                       <span className="text-xs">Can View Amounts</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <Switch
+                        checked={member.canShowContacts}
+                        onCheckedChange={(checked) => {
+                          updateRoleMutation.mutate({
+                            id: member.id,
+                            canShowContacts: checked,
+                          });
+                        }}
+                        data-testid={`switch-can-show-contacts-${member.id}`}
+                      />
+                      <span className="text-xs">Show Contact Details</span>
                     </label>
                   </div>
                 </>

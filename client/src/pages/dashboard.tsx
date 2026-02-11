@@ -13,10 +13,11 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useAuth } from "@/lib/auth";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   CalendarDays, TrendingUp, Music, MapPin, Layers,
   Wallet, Receipt, Crown, AlertCircle, AlertTriangle, Calendar as CalendarIcon,
-  CheckCircle, UserCheck, Ban,
+  CheckCircle, UserCheck, Ban, Phone, Mail, User,
 } from "lucide-react";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths, subYears, endOfDay } from "date-fns";
 import { Link } from "wouter";
@@ -429,7 +430,50 @@ export default function Dashboard() {
                             <span className="text-xs text-muted-foreground">
                               {format(new Date(show.showDate), "MMM d, yyyy")}
                             </span>
+                            {show.location && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                <MapPin className="w-2.5 h-2.5" />
+                                {show.location}
+                              </span>
+                            )}
                           </div>
+                          {(show.pocName || show.pocPhone || show.pocEmail) && (
+                            <div className="mt-1.5">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button size="sm" variant="outline" data-testid={`button-contact-upcoming-${show.id}`}>
+                                    <Phone className="w-3 h-3 mr-1" />
+                                    Contact Details
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-sm">
+                                  <DialogHeader>
+                                    <DialogTitle>Contact Details</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-3">
+                                    {show.pocName && (
+                                      <div className="flex items-center gap-2">
+                                        <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                        <span className="text-sm">{show.pocName}</span>
+                                      </div>
+                                    )}
+                                    {show.pocPhone && (
+                                      <div className="flex items-center gap-2">
+                                        <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                        <a href={`tel:${show.pocPhone}`} className="text-sm text-primary hover:underline">{show.pocPhone}</a>
+                                      </div>
+                                    )}
+                                    {show.pocEmail && (
+                                      <div className="flex items-center gap-2">
+                                        <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                        <a href={`mailto:${show.pocEmail}`} className="text-sm text-primary hover:underline">{show.pocEmail}</a>
+                                      </div>
+                                    )}
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                           <Badge variant={showTypeBadgeVariant(show.showType) as any}>

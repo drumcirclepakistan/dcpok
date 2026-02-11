@@ -384,8 +384,16 @@ export default function FinancialsPage() {
                       <span className="text-sm font-semibold" data-testid="text-upcoming-shows-count">{stats?.upcomingShowsCount || 0}</span>
                     </div>
                   </div>
+                  {(stats?.retainedFundsEarnings || 0) > 0 && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-muted-foreground">Cancelled show allocations</span>
+                      <span className="text-sm font-semibold" data-testid="text-allocated-funds-amount">
+                        Rs {stats!.retainedFundsEarnings!.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                   <div className="border-t pt-2 flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">Total earned (paid)</span>
+                    <span className="text-sm font-medium">Total earned (paid{(stats?.retainedFundsEarnings || 0) > 0 ? " + allocations" : ""})</span>
                     <span className="text-sm font-bold text-primary">Rs {(stats?.totalEarnings || 0).toLocaleString()}</span>
                   </div>
                 </div>

@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarPlus, Search, ListMusic, Filter, AlertCircle, CheckCircle, UserCheck } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { CalendarPlus, Search, ListMusic, Filter, AlertCircle, CheckCircle, UserCheck, Phone, Mail, User, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
@@ -30,6 +31,9 @@ interface MemberShow {
   isReferrer?: boolean;
   cancelledAllocation?: number;
   cancellationReason?: string | null;
+  pocName?: string | null;
+  pocPhone?: string | null;
+  pocEmail?: string | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -204,7 +208,8 @@ export default function ShowsPage() {
                       </span>
                     )}
                     {show.location && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                        <MapPin className="w-2.5 h-2.5" />
                         {show.location}
                       </span>
                     )}
@@ -213,6 +218,43 @@ export default function ShowsPage() {
                         {show.numberOfDrums} drums
                       </span>
                     )}
+                  </div>
+                )}
+                {isMember && (show.pocName || show.pocPhone || show.pocEmail) && (
+                  <div className="mt-1.5">
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button size="sm" variant="outline" data-testid={`button-contact-${show.id}`}>
+                          <Phone className="w-3 h-3 mr-1" />
+                          Contact Details
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-sm">
+                        <DialogHeader>
+                          <DialogTitle>Contact Details</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3">
+                          {show.pocName && (
+                            <div className="flex items-center gap-2">
+                              <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              <span className="text-sm" data-testid={`text-contact-name-${show.id}`}>{show.pocName}</span>
+                            </div>
+                          )}
+                          {show.pocPhone && (
+                            <div className="flex items-center gap-2">
+                              <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              <a href={`tel:${show.pocPhone}`} className="text-sm text-primary hover:underline" data-testid={`text-contact-phone-${show.id}`}>{show.pocPhone}</a>
+                            </div>
+                          )}
+                          {show.pocEmail && (
+                            <div className="flex items-center gap-2">
+                              <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              <a href={`mailto:${show.pocEmail}`} className="text-sm text-primary hover:underline" data-testid={`text-contact-email-${show.id}`}>{show.pocEmail}</a>
+                            </div>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 )}
               </div>
