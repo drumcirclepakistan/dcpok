@@ -38,31 +38,20 @@ export async function registerRoutes(
   const PgStore = connectPgSimple(session);
 
   app.use(
-  session({
-    store: new PgStore({
-      conString: process.env.DATABASE_URL,
-      createTableIfMissing: true,
-      // Add this line to force SSL for the session store
-      pgOptions: { ssl: { rejectUnauthorized: false } } 
-    }),
-    secret: process.env.SESSION_SECRET || "drum-circle-pk-secret-2024",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // Better security on Render
-      sameSite: "lax",
-    },
-  })
-);
+    session({
+      store: new PgStore({
+        conString: process.env.DATABASE_URL,
+        createTableIfMissing: true,
+        // Add this line to force SSL for the session store
+        pgOptions: { ssl: { rejectUnauthorized: false } } 
+      }),
       secret: process.env.SESSION_SECRET || "drum-circle-pk-secret-2024",
       resave: false,
       saveUninitialized: false,
       cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         httpOnly: true,
-        secure: false,
+        secure: process.env.NODE_ENV === "production", // Better security on Render
         sameSite: "lax",
       },
     })
@@ -1424,8 +1413,8 @@ export async function registerRoutes(
 
   app.patch("/api/member/password", requireAuth, async (req, res) => {
     try {
-      const member = await getMemberContext(req);
-      if (!member) return res.status(403).json({ message: "Member access only" });
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ message: "User not found" });
 
       const { currentPassword, newPassword } = req.body;
       if (!currentPassword || !newPassword) {
@@ -1434,8 +1423,6 @@ export async function registerRoutes(
       if (newPassword.length < 6) {
         return res.status(400).json({ message: "New password must be at least 6 characters" });
       }
-      const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(404).json({ message: "User not found" });
 
       const valid = await storage.verifyPassword(currentPassword, user.password);
       if (!valid) {
@@ -1489,8 +1476,7 @@ export async function registerRoutes(
         minFlatRate: member.minFlatRate ?? null,
       });
 
-      const user = await storage.getUser(req.session.userId!);
-      logActivity(req.session.userId!, user?.displayName || member.name, "show_created", `${member.name} added show "${show.title}" for ${show.city}`);
+      logActivity(req.session.userId!, member.name, "show_created", `${member.name} added show "${show.title}" for ${show.city}`);
       notifyUser(founderUser.id, "member_created_show", `${member.name} added a new show "${show.title}" on ${new Date(show.showDate).toLocaleDateString("en-PK", { year: "numeric", month: "short", day: "numeric" })}`, show.id, show.title);
 
       res.json(show);
@@ -1643,7 +1629,7 @@ export async function registerRoutes(
 
       const { username, password } = req.body;
       if (!username || !password) {
-        return res.status(400).json({ message: "Username and password are required" });
+        return res.status(400).json({ message: "Username and password required" });
       }
       if (password.length < 6) {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
