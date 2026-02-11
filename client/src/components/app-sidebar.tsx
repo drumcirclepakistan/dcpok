@@ -33,6 +33,7 @@ export function AppSidebar() {
         items.push({ title: "Add Show", url: "/shows/new", icon: CalendarPlus });
       }
       items.push({ title: "Financials", url: "/financials", icon: Wallet });
+      items.push({ title: "Invoice Generator", url: "/invoices", icon: Receipt });
       items.push({ title: "Payout Policy", url: "/policy", icon: FileText });
       items.push({ title: "Account", url: "/account", icon: UserCog });
       return items;

@@ -74,6 +74,8 @@ interface BandMember {
   canAddShows: boolean;
   canEditName: boolean;
   canViewAmounts: boolean;
+  canShowContacts: boolean;
+  canGenerateInvoice: boolean;
   email: string | null;
 }
 
@@ -279,7 +281,7 @@ export default function SettingsPage() {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name?: string; role?: string; customRole?: string | null; canAddShows?: boolean; canEditName?: boolean; canViewAmounts?: boolean; canShowContacts?: boolean; email?: string | null }) =>
+    mutationFn: ({ id, ...data }: { id: string; name?: string; role?: string; customRole?: string | null; canAddShows?: boolean; canEditName?: boolean; canViewAmounts?: boolean; canShowContacts?: boolean; canGenerateInvoice?: boolean; email?: string | null }) =>
       apiRequest("PATCH", `/api/band-members/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/band-members"] });
@@ -822,6 +824,19 @@ export default function SettingsPage() {
                         data-testid={`switch-can-show-contacts-${member.id}`}
                       />
                       <span className="text-xs">Show Contact Details</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <Switch
+                        checked={member.canGenerateInvoice}
+                        onCheckedChange={(checked) => {
+                          updateRoleMutation.mutate({
+                            id: member.id,
+                            canGenerateInvoice: checked,
+                          });
+                        }}
+                        data-testid={`switch-can-generate-invoice-${member.id}`}
+                      />
+                      <span className="text-xs">Can Generate Invoice</span>
                     </label>
                   </div>
                 </>

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db } from "./db";
 import { desc } from "drizzle-orm";
 import {
@@ -91,6 +91,8 @@ export interface IStorage {
   deleteShowType(id: string): Promise<boolean>;
 
   getInvoices(userId: string): Promise<Invoice[]>;
+  getAllInvoices(): Promise<Invoice[]>;
+  getInvoicesForMember(userId: string, bandMemberId: string): Promise<Invoice[]>;
   getInvoice(id: string): Promise<Invoice | undefined>;
   getNextInvoiceNumber(): Promise<number>;
   createInvoice(invoice: Omit<Invoice, "id" | "createdAt"> & { id?: string; createdAt?: Date }): Promise<Invoice>;
@@ -348,6 +350,16 @@ export class DatabaseStorage implements IStorage {
 
   async getInvoices(userId: string): Promise<Invoice[]> {
     return db.select().from(invoices).where(eq(invoices.userId, userId)).orderBy(desc(invoices.createdAt));
+  }
+
+  async getAllInvoices(): Promise<Invoice[]> {
+    return db.select().from(invoices).orderBy(desc(invoices.createdAt));
+  }
+
+  async getInvoicesForMember(userId: string, bandMemberId: string): Promise<Invoice[]> {
+    return db.select().from(invoices).where(
+      or(eq(invoices.userId, userId), eq(invoices.sharedWithMemberId, bandMemberId))
+    ).orderBy(desc(invoices.createdAt));
   }
 
   async getInvoice(id: string): Promise<Invoice | undefined> {

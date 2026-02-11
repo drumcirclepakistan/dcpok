@@ -9,6 +9,7 @@ interface ExtendedUser extends User {
   canEditName?: boolean;
   canViewAmounts?: boolean;
   canShowContacts?: boolean;
+  canGenerateInvoice?: boolean;
 }
 
 interface AuthContextType {

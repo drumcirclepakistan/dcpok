@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,9 +37,11 @@ import {
   Filter,
   Pencil,
   X,
+  Share2,
+  Eye,
 } from "lucide-react";
 import { format } from "date-fns";
-import type { Invoice, InvoiceItem } from "@shared/schema";
+import type { Invoice, InvoiceItem, BandMember } from "@shared/schema";
 import jsPDF from "jspdf";
 import { LOGO_BASE64 } from "@/lib/invoice-logo";
 
@@ -284,10 +287,12 @@ function emptyItem(): ShowItemForm {
 
 export default function InvoiceGeneratorPage() {
   const { toast } = useToast();
+  const { user, isAdmin, isMember } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [shareInvoiceId, setShareInvoiceId] = useState<string | null>(null);
 
   const [formType, setFormType] = useState<"invoice" | "quotation">("invoice");
   const [billTo, setBillTo] = useState("");
@@ -295,12 +300,20 @@ export default function InvoiceGeneratorPage() {
   const [showItems, setShowItems] = useState<ShowItemForm[]>([emptyItem()]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const canCreate = isAdmin || (isMember && user?.canGenerateInvoice);
+  const apiBase = isAdmin ? "/api/invoices" : "/api/member/invoices";
+
+  const { data: bandMembersList } = useQuery<BandMember[]>({
+    queryKey: ["/api/band-members"],
+    enabled: isAdmin,
+  });
+
   const { data: invoicesList, isLoading } = useQuery<Invoice[]>({
-    queryKey: ["/api/invoices", typeFilter],
+    queryKey: [apiBase, typeFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (typeFilter !== "all") params.set("type", typeFilter);
-      const res = await fetch(`/api/invoices?${params.toString()}`, { credentials: "include" });
+      const res = await fetch(`${apiBase}?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -308,11 +321,11 @@ export default function InvoiceGeneratorPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/invoices", data);
+      const res = await apiRequest("POST", apiBase, data);
       return res.json();
     },
     onSuccess: (invoice: Invoice) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: [apiBase] });
       toast({ title: `${invoice.type === "invoice" ? "Invoice" : "Quotation"} created`, description: invoice.displayNumber });
       downloadInvoicePDF(invoice);
       resetForm();
@@ -324,11 +337,11 @@ export default function InvoiceGeneratorPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const res = await apiRequest("PATCH", `/api/invoices/${id}`, data);
+      const res = await apiRequest("PATCH", `${apiBase}/${id}`, data);
       return res.json();
     },
     onSuccess: (invoice: Invoice) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: [apiBase] });
       toast({ title: `${invoice.type === "invoice" ? "Invoice" : "Quotation"} updated`, description: invoice.displayNumber });
       resetForm();
     },
@@ -339,12 +352,27 @@ export default function InvoiceGeneratorPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/invoices/${id}`);
+      await apiRequest("DELETE", `${apiBase}/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: [apiBase] });
       toast({ title: "Deleted successfully" });
       setDeleteId(null);
+    },
+  });
+
+  const shareMutation = useMutation({
+    mutationFn: async ({ id, memberId }: { id: string; memberId: string | null }) => {
+      const res = await apiRequest("PATCH", `/api/invoices/${id}`, { sharedWithMemberId: memberId });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [apiBase] });
+      toast({ title: "Sharing updated" });
+      setShareInvoiceId(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
 
@@ -468,9 +496,11 @@ export default function InvoiceGeneratorPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold" data-testid="text-invoice-page-title">Invoice Generator</h1>
-          <p className="text-sm text-muted-foreground">Create and manage invoices & quotations</p>
+          <p className="text-sm text-muted-foreground">
+            {canCreate ? "Create and manage invoices & quotations" : "View shared invoices & quotations"}
+          </p>
         </div>
-        {!showForm && (
+        {!showForm && canCreate && (
           <Button onClick={() => { resetForm(); setShowForm(true); }} data-testid="button-create-invoice">
             <Plus className="w-4 h-4 mr-1" />
             Create New
@@ -690,6 +720,9 @@ export default function InvoiceGeneratorPage() {
               const items = getInvoiceItems(inv);
               const totalAmount = items.reduce((s, it) => s + it.amount, 0);
               const cities = Array.from(new Set(items.map(it => it.city))).join(", ");
+              const isOwn = inv.userId === user?.id;
+              const isSharedWithMe = isMember && !isOwn && inv.sharedWithMemberId === user?.bandMemberId;
+              const sharedMember = isAdmin && inv.sharedWithMemberId ? bandMembersList?.find(m => m.id === inv.sharedWithMemberId) : null;
 
               return (
                 <Card key={inv.id} data-testid={`card-invoice-${inv.id}`}>
@@ -709,6 +742,18 @@ export default function InvoiceGeneratorPage() {
                           {items.length > 1 && (
                             <Badge variant="outline" className="text-[10px]">
                               {items.length} shows
+                            </Badge>
+                          )}
+                          {isSharedWithMe && (
+                            <Badge variant="outline" className="text-[10px]" data-testid={`badge-shared-${inv.id}`}>
+                              <Eye className="w-3 h-3 mr-0.5" />
+                              Shared with you
+                            </Badge>
+                          )}
+                          {isAdmin && sharedMember && (
+                            <Badge variant="outline" className="text-[10px]" data-testid={`badge-shared-with-${inv.id}`}>
+                              <Share2 className="w-3 h-3 mr-0.5" />
+                              Shared: {sharedMember.name}
                             </Badge>
                           )}
                         </div>
@@ -737,14 +782,16 @@ export default function InvoiceGeneratorPage() {
                           Rs {totalAmount.toLocaleString()}
                         </span>
                         <div className="flex items-center gap-1">
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            onClick={() => startEdit(inv)}
-                            data-testid={`button-edit-${inv.id}`}
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
+                          {(isAdmin || isOwn) && (
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={() => startEdit(inv)}
+                              data-testid={`button-edit-${inv.id}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -754,39 +801,91 @@ export default function InvoiceGeneratorPage() {
                             <Download className="w-3.5 h-3.5 mr-1" />
                             PDF
                           </Button>
-                          <Dialog open={deleteId === inv.id} onOpenChange={(open) => !open && setDeleteId(null)}>
-                            <DialogTrigger asChild>
-                              <Button
-                                size="icon"
-                                variant="outline"
-                                onClick={() => setDeleteId(inv.id)}
-                                data-testid={`button-delete-${inv.id}`}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-sm">
-                              <DialogHeader>
-                                <DialogTitle>Delete {inv.type === "invoice" ? "Invoice" : "Quotation"}?</DialogTitle>
-                              </DialogHeader>
-                              <p className="text-sm text-muted-foreground">
-                                This will permanently delete {inv.displayNumber} for {inv.billTo}.
-                              </p>
-                              <DialogFooter className="gap-2">
-                                <DialogClose asChild>
-                                  <Button variant="outline">Cancel</Button>
-                                </DialogClose>
+                          {isAdmin && (
+                            <Dialog open={shareInvoiceId === inv.id} onOpenChange={(open) => !open && setShareInvoiceId(null)}>
+                              <DialogTrigger asChild>
                                 <Button
-                                  variant="destructive"
-                                  onClick={() => deleteMutation.mutate(inv.id)}
-                                  disabled={deleteMutation.isPending}
-                                  data-testid="button-confirm-delete"
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => setShareInvoiceId(inv.id)}
+                                  data-testid={`button-share-${inv.id}`}
                                 >
-                                  {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                                  <Share2 className="w-3.5 h-3.5" />
                                 </Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-sm">
+                                <DialogHeader>
+                                  <DialogTitle>Share {inv.displayNumber}</DialogTitle>
+                                </DialogHeader>
+                                <p className="text-sm text-muted-foreground">
+                                  Select a band member to share this {inv.type} with, or remove sharing.
+                                </p>
+                                <div className="space-y-2">
+                                  {inv.sharedWithMemberId && (
+                                    <Button
+                                      variant="outline"
+                                      className="w-full"
+                                      onClick={() => shareMutation.mutate({ id: inv.id, memberId: null })}
+                                      disabled={shareMutation.isPending}
+                                      data-testid="button-remove-share"
+                                    >
+                                      Remove Sharing
+                                    </Button>
+                                  )}
+                                  {bandMembersList?.filter(m => m.userId).map((m) => (
+                                    <Button
+                                      key={m.id}
+                                      variant={inv.sharedWithMemberId === m.id ? "default" : "outline"}
+                                      className="w-full justify-start"
+                                      onClick={() => shareMutation.mutate({ id: inv.id, memberId: m.id })}
+                                      disabled={shareMutation.isPending}
+                                      data-testid={`button-share-member-${m.id}`}
+                                    >
+                                      {m.name}
+                                      {inv.sharedWithMemberId === m.id && (
+                                        <Badge variant="secondary" className="ml-auto text-[10px]">Shared</Badge>
+                                      )}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          )}
+                          {(isAdmin || isOwn) && (
+                            <Dialog open={deleteId === inv.id} onOpenChange={(open) => !open && setDeleteId(null)}>
+                              <DialogTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => setDeleteId(inv.id)}
+                                  data-testid={`button-delete-${inv.id}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-sm">
+                                <DialogHeader>
+                                  <DialogTitle>Delete {inv.type === "invoice" ? "Invoice" : "Quotation"}?</DialogTitle>
+                                </DialogHeader>
+                                <p className="text-sm text-muted-foreground">
+                                  This will permanently delete {inv.displayNumber} for {inv.billTo}.
+                                </p>
+                                <DialogFooter className="gap-2">
+                                  <DialogClose asChild>
+                                    <Button variant="outline">Cancel</Button>
+                                  </DialogClose>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={() => deleteMutation.mutate(inv.id)}
+                                    disabled={deleteMutation.isPending}
+                                    data-testid="button-confirm-delete"
+                                  >
+                                    {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -175,6 +175,7 @@ export async function registerRoutes(
   await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS min_flat_rate INTEGER`);
   await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_add_shows BOOLEAN NOT NULL DEFAULT false`);
   await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_edit_name BOOLEAN NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_generate_invoice BOOLEAN NOT NULL DEFAULT false`);
 
   // Show types table
   await db.execute(sql`
@@ -237,10 +238,12 @@ export async function registerRoutes(
       amount INTEGER NOT NULL,
       tax_mode tax_mode NOT NULL DEFAULT 'exclusive',
       items TEXT,
+      shared_with_member_id VARCHAR,
       created_at TIMESTAMP NOT NULL DEFAULT now(),
       user_id VARCHAR NOT NULL
     )
   `);
+  await db.execute(sql`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS shared_with_member_id VARCHAR`);
 
   await seedDatabase();
 
@@ -283,6 +286,7 @@ export async function registerRoutes(
           canAddShows: bandMember?.canAddShows || false,
           canEditName: bandMember?.canEditName || false,
           canViewAmounts: bandMember?.canViewAmounts || false,
+          canGenerateInvoice: bandMember?.canGenerateInvoice || false,
         });
       }
       res.json(safeUser);
@@ -310,6 +314,7 @@ export async function registerRoutes(
         canEditName: bandMember?.canEditName || false,
         canViewAmounts: bandMember?.canViewAmounts || false,
         canShowContacts: bandMember?.canShowContacts || false,
+        canGenerateInvoice: bandMember?.canGenerateInvoice || false,
       });
     }
     res.json(safeUser);
@@ -1777,10 +1782,151 @@ export async function registerRoutes(
     }
   });
 
+  // Member invoice routes
+  app.get("/api/member/invoices", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+
+      const memberInvoices = await storage.getInvoicesForMember(req.session.userId!, member.id);
+      const { search, type } = req.query as { search?: string; type?: string };
+
+      let filtered = memberInvoices;
+      if (type && (type === "invoice" || type === "quotation")) {
+        filtered = filtered.filter(inv => inv.type === type);
+      }
+      if (search) {
+        const q = search.toLowerCase();
+        filtered = filtered.filter(inv => {
+          if (inv.billTo.toLowerCase().includes(q) || inv.displayNumber.toLowerCase().includes(q) || inv.city.toLowerCase().includes(q)) return true;
+          if (inv.items) {
+            try {
+              const itemsList = JSON.parse(inv.items);
+              return itemsList.some((it: any) => it.city?.toLowerCase().includes(q));
+            } catch { return false; }
+          }
+          return false;
+        });
+      }
+      res.json(filtered);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch invoices" });
+    }
+  });
+
+  app.post("/api/member/invoices", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+      if (!member.canGenerateInvoice) return res.status(403).json({ message: "Not permitted to create invoices" });
+
+      const parsed = insertInvoiceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const { type, billTo, taxMode, items: parsedItems } = parsed.data;
+      const serializedItems = parsedItems.map((it: any) => ({
+        city: it.city,
+        numberOfDrums: it.numberOfDrums,
+        duration: it.duration,
+        eventDate: it.eventDate instanceof Date ? it.eventDate.toISOString() : it.eventDate,
+        amount: it.amount,
+      }));
+      const firstItem = serializedItems[0];
+      const totalAmount = serializedItems.reduce((sum: number, it: any) => sum + it.amount, 0);
+      const nextNumber = await storage.getNextInvoiceNumber();
+      const displayNumber = `DCP-${nextNumber}`;
+      const invoice = await storage.createInvoice({
+        type,
+        billTo,
+        city: firstItem.city,
+        numberOfDrums: firstItem.numberOfDrums,
+        duration: firstItem.duration,
+        eventDate: new Date(firstItem.eventDate),
+        amount: totalAmount,
+        taxMode: taxMode || "exclusive",
+        items: JSON.stringify(serializedItems),
+        number: nextNumber,
+        displayNumber,
+        userId: req.session.userId!,
+        sharedWithMemberId: null,
+      });
+
+      const user = await storage.getUser(req.session.userId!);
+      await logActivity(req.session.userId!, user?.displayName || "Member", `Created ${type}`, `${displayNumber} for ${billTo}`);
+
+      res.json(invoice);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to create invoice" });
+    }
+  });
+
+  app.patch("/api/member/invoices/:id", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+
+      const invoiceId = req.params.id as string;
+      const existing = await storage.getInvoice(invoiceId);
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      if (existing.userId !== req.session.userId) return res.status(403).json({ message: "Can only edit your own invoices" });
+
+      const parsed = insertInvoiceSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+
+      const updateData: any = {};
+      const { type, billTo, taxMode, items: parsedItems } = parsed.data;
+      if (type !== undefined) updateData.type = type;
+      if (billTo !== undefined) updateData.billTo = billTo;
+      if (taxMode !== undefined) updateData.taxMode = taxMode;
+      if (parsedItems !== undefined && parsedItems.length > 0) {
+        const serializedItems = parsedItems.map((it: any) => ({
+          city: it.city,
+          numberOfDrums: it.numberOfDrums,
+          duration: it.duration,
+          eventDate: it.eventDate instanceof Date ? it.eventDate.toISOString() : it.eventDate,
+          amount: it.amount,
+        }));
+        updateData.items = JSON.stringify(serializedItems);
+        updateData.city = serializedItems[0].city;
+        updateData.numberOfDrums = serializedItems[0].numberOfDrums;
+        updateData.duration = serializedItems[0].duration;
+        updateData.eventDate = new Date(serializedItems[0].eventDate);
+        updateData.amount = serializedItems.reduce((sum: number, it: any) => sum + it.amount, 0);
+      }
+
+      const updated = await storage.updateInvoice(invoiceId, updateData);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to update invoice" });
+    }
+  });
+
+  app.delete("/api/member/invoices/:id", requireAuth, async (req, res) => {
+    try {
+      const member = await getMemberContext(req);
+      if (!member) return res.status(403).json({ message: "Member access only" });
+
+      const invoiceId = req.params.id as string;
+      const invoice = await storage.getInvoice(invoiceId);
+      if (!invoice) return res.status(404).json({ message: "Not found" });
+      if (invoice.userId !== req.session.userId) return res.status(403).json({ message: "Can only delete your own invoices" });
+
+      await storage.deleteInvoice(invoiceId);
+      const user = await storage.getUser(req.session.userId!);
+      await logActivity(req.session.userId!, user?.displayName || "Member", `Deleted ${invoice.type}`, `${invoice.displayNumber} for ${invoice.billTo}`);
+      res.json({ message: "Deleted" });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to delete" });
+    }
+  });
+
   // Invoice/Quotation routes (admin only)
   app.get("/api/invoices", requireAdmin, async (req, res) => {
     try {
-      const allInvoices = await storage.getInvoices(req.session.userId!);
+      const allInvoices = await storage.getAllInvoices();
       const { search, from, to, type } = req.query as { search?: string; from?: string; to?: string; type?: string };
 
       let filtered = allInvoices;
@@ -1861,15 +2007,16 @@ export async function registerRoutes(
       const invoiceId = req.params.id as string;
       const existing = await storage.getInvoice(invoiceId);
       if (!existing) return res.status(404).json({ message: "Not found" });
-      if (existing.userId !== req.session.userId) return res.status(403).json({ message: "Not authorized" });
-
       const parsed = insertInvoiceSchema.partial().safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      if (!parsed.success && !req.body.sharedWithMemberId && req.body.sharedWithMemberId !== null) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error?.errors });
       }
 
       const updateData: any = {};
-      const { type, billTo, taxMode, items: parsedItems } = parsed.data;
+      if (req.body.sharedWithMemberId !== undefined) {
+        updateData.sharedWithMemberId = req.body.sharedWithMemberId || null;
+      }
+      const { type, billTo, taxMode, items: parsedItems } = parsed.data || {};
       if (type !== undefined) updateData.type = type;
       if (billTo !== undefined) updateData.billTo = billTo;
       if (taxMode !== undefined) updateData.taxMode = taxMode;

@@ -51,7 +51,7 @@ function Router() {
       <Route path="/policy">{() => <MemberOnly component={PolicyPage} />}</Route>
       <Route path="/settings">{() => <AdminOnly component={SettingsPage} />}</Route>
       <Route path="/account" component={MemberSettingsPage} />
-      <Route path="/invoices">{() => <AdminOnly component={InvoiceGeneratorPage} />}</Route>
+      <Route path="/invoices" component={InvoiceGeneratorPage} />
       <Route path="/activity-log">{() => <AdminOnly component={ActivityLogPage} />}</Route>
       <Route component={NotFound} />
     </Switch>

@@ -148,6 +148,7 @@ export const bandMembers = pgTable("band_members", {
   canEditName: boolean("can_edit_name").notNull().default(false),
   canViewAmounts: boolean("can_view_amounts").notNull().default(false),
   canShowContacts: boolean("can_show_contacts").notNull().default(false),
+  canGenerateInvoice: boolean("can_generate_invoice").notNull().default(false),
   email: text("email"),
 });
 
@@ -168,6 +169,7 @@ export const insertBandMemberSchema = createInsertSchema(bandMembers).omit({
   canEditName: z.boolean().optional(),
   canViewAmounts: z.boolean().optional(),
   canShowContacts: z.boolean().optional(),
+  canGenerateInvoice: z.boolean().optional(),
   email: z.string().email().optional().nullable(),
 });
 
@@ -277,6 +279,7 @@ export const invoices = pgTable("invoices", {
   amount: integer("amount").notNull(),
   taxMode: taxModeEnum("tax_mode").notNull().default("exclusive"),
   items: text("items"),
+  sharedWithMemberId: varchar("shared_with_member_id"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   userId: varchar("user_id").notNull(),
 });

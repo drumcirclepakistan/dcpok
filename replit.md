@@ -1,157 +1,41 @@
 # Drum Circle Pakistan - Band Management System
 
 ## Overview
-A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admin access for Haider Jamil with show management, financial tracking, band member management, and account provisioning. Member-facing interface allows band members to view their assigned shows, earnings, and dashboard stats.
-
-## Architecture
-- **Frontend**: React + Vite + TailwindCSS + shadcn/ui components
-- **Backend**: Express.js with session-based authentication
-- **Database**: PostgreSQL with Drizzle ORM
-- **Routing**: wouter (frontend), Express (backend)
-- **State**: TanStack React Query
-
-## Key Features
-- Session-based login (admin account: username `founder`, password `drumcircle2024`)
-- Dashboard with time range filtering (Lifetime, This Year, Last Year, This/Last Month, Last 3/6 Months, Custom)
-- Dashboard stats: Shows Performed, Total Revenue, Revenue After Expenses, My Earnings (from paid completed shows + unallocated cancelled funds), Cancelled Show Amount (retained advance from cancelled shows), Upcoming Shows, Pending Payments, No Advance Received (warning)
-- Dashboard insights: Top Cities, Top Show Types (filtered by time range)
-- Upcoming count and pending payments always show full data regardless of time range
-- Full show CRUD (add, view, edit, delete)
-- Duplicate date warning: Shows alert when adding/editing a show on a date with existing shows
-- **Dynamic show types**: Managed via Settings (add/edit/remove), stored in show_types table with configurable field flags (showOrgField, showPublicField) per type
-- Organization tracking for Corporate/University shows
-- "Public Show For" field for Public shows (e.g. cafe, restaurant name)
-- **Number of Drums**: Optional field per show to specify how many drums are required
-- **Location**: Optional field per show for venue/location details (e.g. Pearl Continental, Bahria Town)
-- Financial tracking: total amount, advance payment, pending amount
-- Paid/Unpaid tracking per show with toggle button on show detail page
-- Shows list highlights completed-but-unpaid shows in red "Action Required" section
-- Shows list highlights upcoming shows with no advance in orange "No Advance Received" section
-- Paid/Unpaid filter on shows list
-- **Cancelled shows**: Cancel/restore shows with optional cancellation reason; expense-aware refund handling (available refund = funds received - expenses); refund types (non-refundable, partial refund with amount, complete refund); cancelled shows displayed in separate section on shows list; excluded from all earnings calculations; retained amount shown as "Cancelled Show Amount" on dashboard and added to total revenue
-- **Refund fields**: `refundType` (non_refundable/partial/complete) and `refundAmount` stored per cancelled show
-- **Retained fund allocation**: Retained funds from cancelled shows can be allocated to band members; three modes: Keep Separate (default), Assign to Member (full amount to one member), Split Between Members (equal, payout rules, or manual amounts); allocations stored in `retained_fund_allocations` table; allocated amounts included in member earnings on financials page; dashboard shows allocated/unallocated breakdown; allocations cleared when show is restored
-- Show expenses tracking with add/delete
-- Band member assignment per show from settings-defined members with automated payment calculations
-- **Manual amount override**: Each member in band section can have their calculated amount manually overridden via "Custom amount" checkbox
-- **Dynamic per-member payment configs**: Each band member has configurable payment type (fixed/percentage), normal rate, referral rate, min logic with threshold and flat rate
-- **Payment config dialog shows all upcoming shows**: When saving payment config, dialog lists ALL upcoming shows (not just assigned ones) with "Assigned"/"Not Added" badges; selecting unassigned shows auto-adds the member
-- Financials page: Per-member earnings breakdown with date range filtering
-  - Dynamic member selector from API (not hardcoded)
-  - Shows Performed: Only past/completed shows the member participated in
-  - Upcoming Shows count and list
-  - Total Earnings: Only from paid completed shows
-  - Unpaid Amount: Completed shows not yet paid to the band
-  - Pending Amount: Expected earnings from upcoming shows
-  - Cities Performed In: Only counts past shows
-  - Payment Summary: Paid/Unpaid/Upcoming show counts
-- Band member management: Add/remove members, assign roles (Session Player, Manager, Custom)
-- Member account provisioning: Create login accounts, reset passwords, remove access
-- **Collapsible settings sections**: Payment Configs, Band Members, Show Types
-- **Directory**: Full-text search across all show data (title, city, organization, contact details, notes), date range filtering, summary stats (total/completed/upcoming/paid/unpaid/revenue), show type breakdown, organization grouping with expandable show lists, and one-click contact details dialog
-- Dark mode toggle
-- Responsive sidebar navigation
-- **Live data**: Auto-refresh every 30s (15s for dashboard), refetch on window focus, staleTime 10s
-- **Pull-to-refresh**: Mobile touch pull-down gesture to refresh all active data
-- **In-app notifications**: Bell icon in header with unread count badge; notifications for show assignments (added/removed), member-created shows; mark individual or all as read
-- **Activity log**: Admin-only page tracking logins, show CRUD, paid/unpaid toggles, band member updates with timestamps
-- **Email notifications**: Uses Resend API for show assignment emails (requires RESEND_API_KEY secret)
-- **Invoice Generator**: Admin-only system for creating invoices/quotations with client-side PDF generation (jsPDF); auto-incrementing numbers starting from DCP-4848; supports multiple shows per invoice (each with city/drums/duration/eventDate/amount); form with type/billTo/taxMode and dynamic show items; list with search/filter/download/delete; PDF includes Drum Circle Pakistan logo, orange branding (#ED7825), terms & bank details; items stored as JSON in `items` TEXT column with backward-compatible flat fields
-
-## Member-Facing Interface
-- Members log in with accounts created by admin (Settings > Band Members > Create Account)
-- **Member Dashboard**: Shows performed count, total earnings (paid shows only), upcoming shows, pending payments, top cities/types
-- **Member Shows**: Only shows where member is assigned (via show_members), with estimated earnings note for upcoming shows
-- **Member Financials**: Self-only view with paid/unpaid/pending breakdowns, no access to other members' data
-- **Permissions** (controlled by admin in Settings > Band Members):
-  - `canAddShows`: Allows member to create new shows via the show form; member is auto-added to band section as referrer
-  - `canEditName`: Allows member to update their display name via Account page (propagates to show_members records)
-- **Route Protection**: Backend uses `requireAdmin` middleware on admin routes; frontend uses `AdminOnly`/`MemberOnly` wrapper components in App.tsx to redirect unauthorized users to dashboard; members cannot access show details, settings, directory, expenses, or other admin-only pages
-- **Referred by you**: Shows tagged with "Referred by you" badge on shows page, dashboard upcoming/completed shows, and financials show lists
-- **Shows Referred stat**: Count of referred shows displayed on dashboard and financials (visible when > 0)
-- **Payout Policy page**: Member-only page showing payment structure (type, rates, referral rate, minimum logic) with descriptive explanations
-- **Account page** (`/account`): Both admin and members can change their password (requires current password verification); members with `canEditName` can also update their display name
-- **Sidebar**: Members see Dashboard, My Shows, Add Show (if permitted), Financials, Payout Policy, Account (no Settings, no Show Detail links)
-
-## Payment Rules (Dynamic Per-Member Configs)
-- Each band member has configurable payment settings stored in `band_members` table:
-  - `paymentType`: "fixed" or "percentage"
-  - `normalRate`: Fixed amount (Rs) or percentage of net
-  - `referralRate`: Percentage used when member is referrer (percentage type only)
-  - `hasMinLogic`: Enable minimum value logic (percentage type only)
-  - `minThreshold`: If show total below this, use flat rate instead
-  - `minFlatRate`: Base flat rate, minus % of expenses when below threshold
-- **Haider Jamil (Admin)**: Gets remainder after all expenses and member payouts
-- Payment configs are editable per-member in Settings > Payment Configs
-
-## Project Structure
-- `shared/schema.ts` - Drizzle schemas for users, shows, show_expenses, show_members, band_members, show_types, settings, retained_fund_allocations; Zod validation
-- `server/db.ts` - Database connection
-- `server/storage.ts` - Storage interface with DatabaseStorage implementation
-- `server/routes.ts` - API routes (auth + shows CRUD + expenses + members + band members + settings + dashboard + financials + show types)
-- `server/seed.ts` - Seed data for admin account, sample shows, default band members with payment configs, and default show types
-- `client/src/lib/auth.tsx` - Auth context provider
-- `client/src/components/app-sidebar.tsx` - Sidebar navigation
-- `client/src/components/theme-toggle.tsx` - Dark/light mode toggle
-- `client/src/pages/` - Login, Dashboard, Shows, ShowForm, ShowDetail, Financials, Settings pages
-
-## API Routes
-- `POST /api/auth/login` - Login
-- `GET /api/auth/me` - Get current user
-- `POST /api/auth/logout` - Logout
-- `GET /api/shows` - List all shows (admin)
-- `GET /api/shows/check-date?date=&excludeId=` - Check for shows on same date (authenticated)
-- `GET /api/shows/:id` - Get show detail (admin)
-- `POST /api/shows` - Create show (admin)
-- `PATCH /api/shows/:id` - Update show (admin)
-- `DELETE /api/shows/:id` - Delete show (admin)
-- `PATCH /api/shows/:id/toggle-paid` - Toggle paid/unpaid status (admin)
-- `GET /api/shows/:id/expenses` - List expenses for show (admin)
-- `POST /api/shows/:id/expenses` - Add expense (admin)
-- `DELETE /api/shows/:id/expenses/:expenseId` - Remove expense (admin)
-- `GET /api/shows/:id/members` - List members for show (admin)
-- `PUT /api/shows/:id/members` - Replace all members for show (admin)
-- `POST /api/shows/:id/members` - Add member (admin)
-- `DELETE /api/shows/:id/members/:memberId` - Remove member (admin)
-- `GET /api/shows/:id/retained-allocations` - List retained fund allocations (admin)
-- `PUT /api/shows/:id/retained-allocations` - Save retained fund allocations (admin)
-- `DELETE /api/shows/:id/retained-allocations` - Clear retained fund allocations (admin)
-- `GET /api/dashboard/stats?from=&to=` - Aggregated dashboard stats (admin)
-- `GET /api/financials?member=&from=&to=` - Per-member financial stats (admin)
-- `GET /api/band-members` - List all band members (admin)
-- `POST /api/band-members` - Add band member (admin)
-- `PATCH /api/band-members/:id` - Update band member (admin)
-- `GET /api/band-members/:id/upcoming-shows` - Get upcoming shows (admin)
-- `DELETE /api/band-members/:id` - Delete band member (admin)
-- `POST /api/band-members/:id/create-account` - Create login account (admin)
-- `POST /api/band-members/:id/reset-password` - Reset member password (admin)
-- `DELETE /api/band-members/:id/delete-account` - Delete member login account (admin)
-- `GET /api/show-types` - List show types (authenticated)
-- `POST /api/show-types` - Add show type (admin)
-- `PATCH /api/show-types/:id` - Update show type (admin)
-- `DELETE /api/show-types/:id` - Delete show type (admin)
-- `GET /api/settings` - Get settings (admin)
-- `PUT /api/settings` - Update settings (admin)
-- `GET /api/member/shows` - List member's assigned shows (member)
-- `GET /api/member/dashboard?from=&to=` - Member dashboard stats (member)
-- `GET /api/member/financials?from=&to=` - Member financial stats (member)
-- `PATCH /api/auth/change-password` - Change own password (authenticated, requires current password)
-- `POST /api/auth/emergency-reset` - Emergency admin password reset (public, requires ADMIN_RECOVERY_KEY)
-- `PATCH /api/member/name` - Update member's own name (member, requires canEditName)
-- `POST /api/member/shows` - Create show as member (member, requires canAddShows)
-- `GET /api/member/policy` - Get member's payout policy/payment config (member)
-- `GET /api/notifications` - List user's notifications (authenticated)
-- `GET /api/notifications/unread-count` - Get unread notification count (authenticated)
-- `PATCH /api/notifications/:id/read` - Mark notification as read (authenticated)
-- `POST /api/notifications/mark-all-read` - Mark all notifications as read (authenticated)
-- `GET /api/activity-logs?limit=` - List activity logs (admin)
-- `GET /api/invoices?type=` - List invoices/quotations (admin)
-- `POST /api/invoices` - Create invoice/quotation (admin)
-- `PATCH /api/invoices/:id` - Update invoice/quotation (admin, owner-only)
-- `DELETE /api/invoices/:id` - Delete invoice/quotation (admin)
+The Drum Circle Pakistan Band Management System is a modern, mobile-friendly web application designed to streamline band operations. Its primary purpose is to provide Haider Jamil with comprehensive administrative control over show management, financial tracking, band member administration, and account provisioning. Concurrently, it offers band members a dedicated interface to view their assigned shows, track earnings, and access relevant dashboard statistics. This system aims to enhance efficiency, financial transparency, and communication within Drum Circle Pakistan.
 
 ## User Preferences
 - Pakistani Rupees (Rs) for currency
 - Show types: Dynamic, managed via Settings (default: Corporate, Private, Public, University)
 - Organization name tracked for Corporate and University shows
 - All "Founder" references replaced with "Haider Jamil" (name) / "Admin" (role)
+
+## System Architecture
+The application is built with a modern web stack. The frontend utilizes React with Vite for fast development, styled using TailwindCSS and shadcn/ui components for a consistent design. Routing on the frontend is handled by `wouter`, and `TanStack React Query` manages state. The backend is an Express.js server providing a RESTful API with session-based authentication. Data persistence is achieved using PostgreSQL, accessed via the Drizzle ORM.
+
+**Key Architectural Decisions & Features:**
+- **Authentication & Authorization:** Session-based login with distinct admin and member roles. Admin routes are protected by `requireAdmin` middleware, while frontend components use `AdminOnly`/`MemberOnly` wrappers for redirection.
+- **Dynamic Content & Configuration:**
+    - **Show Types:** Configurable via settings, allowing for dynamic fields like `showOrgField` and `showPublicField`.
+    - **Band Member Payment Configurations:** Each member has dynamic payment settings (fixed/percentage, normal rate, referral rate, minimum logic with threshold and flat rate), editable in settings.
+    - **Invoice Generation:** Client-side PDF generation for invoices/quotations with dynamic content and auto-incrementing numbers.
+- **Data Management:**
+    - **Shows:** Full CRUD operations, including duplicate date warnings, optional fields for "Number of Drums" and "Location."
+    - **Financials:** Detailed tracking of show amounts, advances, and pending payments. Paid/Unpaid status toggle, expense tracking, and sophisticated handling of cancelled shows with refund types and retained fund allocation.
+    - **Band Members:** Management of members, roles, account provisioning (create, reset, delete), and assignment to shows with automated and manual payment calculations.
+- **User Interface & Experience:**
+    - **Dashboard:** Provides aggregated statistics with time range filtering, insights into top cities and show types.
+    - **Directory:** Comprehensive full-text search across all show data with filtering, summary stats, and organization grouping.
+    - **Notifications:** In-app notifications with unread counts for show assignments and member-created shows.
+    - **Responsive Design:** Dark mode toggle and responsive sidebar navigation.
+    - **Real-time Data:** Auto-refresh mechanisms (dashboard 15s, others 30s), refetch on window focus, and mobile pull-to-refresh.
+- **Member-Facing Features:**
+    - Dedicated member dashboard, show lists (only assigned shows), and financial views (self-only).
+    - Granular permissions for members (`canAddShows`, `canEditName`, `canGenerateInvoice`).
+    - Payout Policy page detailing individual payment structures.
+    - Account page for password and name updates.
+    - Member access to specific invoices (shared and self-generated if permitted).
+- **Activity Logging:** Admin-only activity log tracking critical actions like logins, show CRUD, payment status changes, and member updates.
+
+## External Dependencies
+- **Resend API**: Used for sending email notifications, specifically for show assignment emails. (Requires `RESEND_API_KEY` secret).
+- **jsPDF**: Client-side library used for generating PDF invoices and quotations.
