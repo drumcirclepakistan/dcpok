@@ -244,6 +244,18 @@ export async function registerRoutes(
 
     await seedDatabase();
     console.log("Database schema check complete.");
+    // FORCE CREATE ADMIN ACCOUNT
+    const adminExists = await db.execute(sql`SELECT * FROM users WHERE role = 'founder' LIMIT 1`);
+    if (adminExists.rows.length === 0) {
+       console.log("No admin found. Creating default admin...");
+       await db.execute(sql`INSERT INTO users (username, password, display_name, role) 
+                            VALUES ('admin', 'Drumcircle2024', 'Founder', 'founder')`);
+       console.log("Admin account created: admin / admin123");
+    }
+
+    // FIX MISSING COLUMNS
+    await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_view_amounts BOOLEAN DEFAULT false`);
+    await db.execute(sql`ALTER TABLE band_members ADD COLUMN IF NOT EXISTS can_show_contacts BOOLEAN DEFAULT false`);
   } catch (dbError) {
     console.error("Non-fatal Database Error during startup:", dbError);
   }
