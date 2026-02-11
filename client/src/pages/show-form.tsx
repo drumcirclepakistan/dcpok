@@ -410,11 +410,15 @@ export default function ShowForm() {
                       <FormLabel>Total Amount (Rs)</FormLabel>
                       <FormControl>
                         <Input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           data-testid="input-total-amount"
                           placeholder="0"
-                          {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
+                          value={field.value || ""}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            field.onChange(raw === "" ? 0 : Number(raw));
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -429,11 +433,15 @@ export default function ShowForm() {
                       <FormLabel>Advance Payment (Rs)</FormLabel>
                       <FormControl>
                         <Input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           data-testid="input-advance-payment"
                           placeholder="0"
-                          {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
+                          value={field.value || ""}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            field.onChange(raw === "" ? 0 : Number(raw));
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
