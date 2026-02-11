@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollText, LogIn, Plus, Trash2, CreditCard, Users, Music } from "lucide-react";
+import { ScrollText, LogIn, Plus, Trash2, CreditCard, Users, Music, Pencil } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface ActivityLog {
@@ -17,6 +17,7 @@ interface ActivityLog {
 const actionConfig: Record<string, { label: string; icon: typeof LogIn; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   login: { label: "Login", icon: LogIn, variant: "secondary" },
   show_created: { label: "Show Created", icon: Plus, variant: "default" },
+  show_updated: { label: "Show Updated", icon: Pencil, variant: "outline" },
   show_deleted: { label: "Show Deleted", icon: Trash2, variant: "destructive" },
   show_marked_paid: { label: "Marked Paid", icon: CreditCard, variant: "default" },
   show_marked_unpaid: { label: "Marked Unpaid", icon: CreditCard, variant: "outline" },

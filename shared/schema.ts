@@ -40,6 +40,7 @@ export const shows = pgTable("shows", {
   isPaid: boolean("is_paid").notNull().default(false),
   numberOfDrums: integer("number_of_drums"),
   location: text("location"),
+  cancellationReason: text("cancellation_reason"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   userId: varchar("user_id").notNull(),
 });
@@ -61,6 +62,7 @@ export const insertShowSchema = createInsertSchema(shows).omit({
   isPaid: z.boolean().optional(),
   numberOfDrums: z.coerce.number().min(0).optional().nullable(),
   location: z.string().optional().nullable(),
+  cancellationReason: z.string().optional().nullable(),
 });
 
 export type InsertShow = z.infer<typeof insertShowSchema>;

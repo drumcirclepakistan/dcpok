@@ -101,6 +101,7 @@ export default function ShowsPage() {
   const unpaidCompleted = useMemo(() => {
     return filtered
       .filter((s) => {
+        if (s.status === "cancelled") return false;
         const isCompleted = s.status === "completed" || new Date(s.showDate) < new Date();
         return isCompleted && !s.isPaid;
       })
@@ -111,17 +112,25 @@ export default function ShowsPage() {
     if (isMember) return [];
     return filtered
       .filter((s: any) => {
+        if (s.status === "cancelled") return false;
         const isUpcoming = s.status === "upcoming" && new Date(s.showDate) > new Date();
         return isUpcoming && s.advancePayment === 0;
       })
       .sort((a, b) => new Date(a.showDate).getTime() - new Date(b.showDate).getTime());
   }, [filtered, isMember]);
 
+  const cancelledShows = useMemo(() => {
+    return filtered
+      .filter((s) => s.status === "cancelled")
+      .sort((a, b) => new Date(b.showDate).getTime() - new Date(a.showDate).getTime());
+  }, [filtered]);
+
   const otherShows = useMemo(() => {
     const unpaidCompletedIds = new Set(unpaidCompleted.map((s) => s.id));
     const noAdvanceIds = new Set(noAdvancePaid.map((s) => s.id));
+    const cancelledIds = new Set(cancelledShows.map((s) => s.id));
     return filtered
-      .filter((s) => !unpaidCompletedIds.has(s.id) && !noAdvanceIds.has(s.id))
+      .filter((s) => !unpaidCompletedIds.has(s.id) && !noAdvanceIds.has(s.id) && !cancelledIds.has(s.id))
       .sort((a, b) => {
         const aUpcoming = a.status === "upcoming";
         const bUpcoming = b.status === "upcoming";
@@ -132,10 +141,11 @@ export default function ShowsPage() {
         if (bUpcoming) return 1;
         return new Date(b.showDate).getTime() - new Date(a.showDate).getTime();
       });
-  }, [filtered, unpaidCompleted, noAdvancePaid]);
+  }, [filtered, unpaidCompleted, noAdvancePaid, cancelledShows]);
 
   const renderShowCard = (show: any, isAlert: boolean) => {
-    const isOverdue = !show.isPaid && (show.status === "completed" || new Date(show.showDate) < new Date());
+    const isCancelled = show.status === "cancelled";
+    const isOverdue = !isCancelled && !show.isPaid && (show.status === "completed" || new Date(show.showDate) < new Date());
     const showLink = isAdmin ? `/shows/${show.id}` : undefined;
     const CardWrapper = ({ children }: { children: React.ReactNode }) =>
       showLink ? <Link href={showLink}>{children}</Link> : <>{children}</>;
@@ -155,7 +165,7 @@ export default function ShowsPage() {
                   <Badge variant={statusColors[show.status] as any} className="text-[10px]">
                     {show.status}
                   </Badge>
-                  {show.isPaid ? (
+                  {!isCancelled && (show.isPaid ? (
                     <Badge variant="secondary" className="text-[10px]">
                       <CheckCircle className="w-2.5 h-2.5 mr-0.5" />
                       Paid
@@ -170,7 +180,7 @@ export default function ShowsPage() {
                       <AlertCircle className="w-2.5 h-2.5 mr-0.5" />
                       Advance not paid
                     </Badge>
-                  ) : null}
+                  ) : null)}
                   {isMember && show.isReferrer && (
                     <Badge variant="outline" className="text-[10px] text-primary">
                       <UserCheck className="w-2.5 h-2.5 mr-0.5" />
@@ -381,6 +391,17 @@ export default function ShowsPage() {
                 <h3 className="text-sm font-semibold text-muted-foreground mt-2">All Shows</h3>
               )}
               {otherShows.map((show) => renderShowCard(show, false))}
+            </div>
+          )}
+
+          {cancelledShows.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-muted-foreground mt-2" data-testid="text-cancelled-section">
+                  Cancelled ({cancelledShows.length})
+                </h3>
+              </div>
+              {cancelledShows.map((show) => renderShowCard(show, false))}
             </div>
           )}
 

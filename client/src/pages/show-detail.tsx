@@ -28,10 +28,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft, MapPin, Calendar, Building2, Pencil, Trash2,
   StickyNote, User, Phone, Mail, Plus, X, Users, Receipt, Calculator,
-  Loader2, CheckCircle, AlertCircle, Drum,
+  Loader2, CheckCircle, AlertCircle, Drum, Ban, MessageSquare,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useMemo } from "react";
@@ -127,6 +128,48 @@ export default function ShowDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/shows"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({ title: show?.isPaid ? "Marked as unpaid" : "Marked as paid" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
+
+  const invalidateShowCaches = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/shows", id] });
+    queryClient.invalidateQueries({ queryKey: ["/api/shows"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/financials"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/member/financials"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/member/shows"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/member/dashboard"] });
+  };
+
+  const cancelShowMutation = useMutation({
+    mutationFn: (data: { status: string; cancellationReason: string }) =>
+      apiRequest("PATCH", `/api/shows/${id}`, data),
+    onSuccess: () => {
+      invalidateShowCaches();
+      toast({ title: "Show cancelled" });
+      setCancelDialogOpen(false);
+      setCancellationReason("");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const uncancelShowMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("PATCH", `/api/shows/${id}`, {
+        status: new Date(show!.showDate) > new Date() ? "upcoming" : "completed",
+        cancellationReason: null,
+      }),
+    onSuccess: () => {
+      invalidateShowCaches();
+      toast({ title: "Show restored" });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -366,21 +409,47 @@ export default function ShowDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant={show.isPaid ? "outline" : "default"}
-            onClick={() => togglePaidMutation.mutate()}
-            disabled={togglePaidMutation.isPending}
-            data-testid="button-toggle-paid"
-          >
-            {togglePaidMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : show.isPaid ? (
-              <AlertCircle className="w-4 h-4 mr-2" />
-            ) : (
-              <CheckCircle className="w-4 h-4 mr-2" />
-            )}
-            {show.isPaid ? "Mark Unpaid" : "Mark Paid"}
-          </Button>
+          {show.status !== "cancelled" && (
+            <Button
+              variant={show.isPaid ? "outline" : "default"}
+              onClick={() => togglePaidMutation.mutate()}
+              disabled={togglePaidMutation.isPending}
+              data-testid="button-toggle-paid"
+            >
+              {togglePaidMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : show.isPaid ? (
+                <AlertCircle className="w-4 h-4 mr-2" />
+              ) : (
+                <CheckCircle className="w-4 h-4 mr-2" />
+              )}
+              {show.isPaid ? "Mark Unpaid" : "Mark Paid"}
+            </Button>
+          )}
+          {show.status === "cancelled" ? (
+            <Button
+              variant="outline"
+              onClick={() => uncancelShowMutation.mutate()}
+              disabled={uncancelShowMutation.isPending}
+              data-testid="button-restore-show"
+            >
+              {uncancelShowMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4 mr-2" />
+              )}
+              Restore Show
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => setCancelDialogOpen(true)}
+              data-testid="button-cancel-show"
+            >
+              <Ban className="w-4 h-4 mr-2" />
+              Cancel Show
+            </Button>
+          )}
           <Link href={`/shows/${id}/edit`}>
             <Button variant="outline" data-testid="button-edit-show">
               <Pencil className="w-4 h-4 mr-2" />
@@ -405,6 +474,40 @@ export default function ShowDetail() {
                 <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
                 <AlertDialogAction data-testid="button-confirm-delete" onClick={() => deleteMutation.mutate()}>
                   Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancel this show?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will mark "{show.title}" as cancelled. Cancelled shows are excluded from all earnings calculations.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="py-2">
+                <label className="text-sm font-medium mb-1.5 block">Reason for cancellation (optional)</label>
+                <Textarea
+                  value={cancellationReason}
+                  onChange={(e) => setCancellationReason(e.target.value)}
+                  placeholder="e.g. Client postponed, weather issues..."
+                  data-testid="input-cancellation-reason"
+                  className="resize-none"
+                  rows={3}
+                />
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-cancel">Go Back</AlertDialogCancel>
+                <AlertDialogAction
+                  data-testid="button-confirm-cancel"
+                  onClick={() => cancelShowMutation.mutate({ status: "cancelled", cancellationReason: cancellationReason.trim() })}
+                >
+                  {cancelShowMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : null}
+                  Cancel Show
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -533,6 +636,20 @@ export default function ShowDetail() {
                     <div>
                       <p className="text-xs text-muted-foreground">Notes</p>
                       <p className="text-sm whitespace-pre-wrap mt-1" data-testid="text-detail-notes">{show.notes}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {show.status === "cancelled" && (
+                <div className="border-t pt-5">
+                  <div className="flex items-start gap-3">
+                    <MessageSquare className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Cancellation Reason</p>
+                      <p className="text-sm whitespace-pre-wrap mt-1" data-testid="text-cancellation-reason">
+                        {show.cancellationReason || "No reason provided"}
+                      </p>
                     </div>
                   </div>
                 </div>

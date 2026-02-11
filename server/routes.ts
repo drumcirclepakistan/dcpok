@@ -117,6 +117,7 @@ export async function registerRoutes(
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS poc_email TEXT`);
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT false`);
   await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS public_show_for TEXT`);
+  await db.execute(sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS cancellation_reason TEXT`);
 
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS show_expenses (
@@ -357,6 +358,36 @@ export async function registerRoutes(
       }
       const parsed = insertShowSchema.partial().parse(req.body);
       const updated = await storage.updateShow(req.params.id as string, parsed);
+
+      const changes: string[] = [];
+      const fieldLabels: Record<string, string> = {
+        title: "Title", city: "City", showType: "Show Type", totalAmount: "Total Amount",
+        advancePayment: "Advance Payment", status: "Status", notes: "Notes",
+        pocName: "Contact Name", pocPhone: "Contact Phone", pocEmail: "Contact Email",
+        organizationName: "Organization", publicShowFor: "Public Show For",
+        numberOfDrums: "Number of Drums", location: "Location", isPaid: "Paid Status",
+        cancellationReason: "Cancellation Reason",
+      };
+      for (const [key, label] of Object.entries(fieldLabels)) {
+        const oldVal = (existing as any)[key];
+        const newVal = (updated as any)[key];
+        if (oldVal instanceof Date && newVal instanceof Date) {
+          if (oldVal.getTime() !== newVal.getTime()) changes.push(`${label}`);
+        } else if (String(oldVal ?? "") !== String(newVal ?? "")) {
+          if (key === "totalAmount" || key === "advancePayment") {
+            changes.push(`${label}: Rs ${oldVal ?? 0} → Rs ${newVal ?? 0}`);
+          } else if (key === "status") {
+            changes.push(`Status: ${oldVal} → ${newVal}`);
+          } else {
+            changes.push(label);
+          }
+        }
+      }
+      if (changes.length > 0) {
+        const user = await storage.getUser(req.session.userId!);
+        logActivity(req.session.userId!, user?.displayName || "Admin", "show_updated", `Updated "${existing.title}": ${changes.join(", ")}`);
+      }
+
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Update failed" });
@@ -537,7 +568,7 @@ export async function registerRoutes(
       const allShows = await storage.getShows(req.session.userId!);
       const { from, to } = req.query as { from?: string; to?: string };
 
-      let filteredShows = allShows;
+      let filteredShows = allShows.filter(s => s.status !== "cancelled");
       if (from) {
         const fromDate = new Date(from as string);
         filteredShows = filteredShows.filter((s) => new Date(s.showDate) >= fromDate);
@@ -584,11 +615,12 @@ export async function registerRoutes(
         .sort((a, b) => b[1] - a[1])
         .map(([type, count]) => ({ type, count }));
 
-      const upcomingCount = allShows.filter((s) => s.status === "upcoming").length;
-      const pendingAmount = allShows
+      const activeShows = allShows.filter(s => s.status !== "cancelled");
+      const upcomingCount = activeShows.filter((s) => s.status === "upcoming").length;
+      const pendingAmount = activeShows
         .filter((s) => !s.isPaid)
         .reduce((s, sh) => s + (sh.totalAmount - sh.advancePayment), 0);
-      const noAdvanceCount = allShows.filter((s) => s.status === "upcoming" && s.advancePayment === 0).length;
+      const noAdvanceCount = activeShows.filter((s) => s.status === "upcoming" && s.advancePayment === 0).length;
 
       res.json({
         totalShows: filteredShows.length,
@@ -613,7 +645,7 @@ export async function registerRoutes(
       const allShows = await storage.getShows(req.session.userId!);
       const { from, to, member } = req.query as { from?: string; to?: string; member?: string };
 
-      let filteredShows = allShows;
+      let filteredShows = allShows.filter(s => s.status !== "cancelled");
       if (from) {
         const fromDate = new Date(from);
         filteredShows = filteredShows.filter((s) => new Date(s.showDate) >= fromDate);
@@ -787,7 +819,7 @@ export async function registerRoutes(
       const member = await getMemberContext(req);
       if (!member) return res.status(403).json({ message: "Member access only" });
 
-      const allShows = await getAllShowsForMember();
+      const allShows = (await getAllShowsForMember()).filter(s => s.status !== "cancelled");
       const { from, to } = req.query as { from?: string; to?: string };
 
       let filteredShows = allShows;
@@ -878,7 +910,7 @@ export async function registerRoutes(
       const member = await getMemberContext(req);
       if (!member) return res.status(403).json({ message: "Member access only" });
 
-      const allShows = await getAllShowsForMember();
+      const allShows = (await getAllShowsForMember()).filter(s => s.status !== "cancelled");
       const { from, to } = req.query as { from?: string; to?: string };
 
       let filteredShows = allShows;
