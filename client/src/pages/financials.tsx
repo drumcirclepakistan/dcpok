@@ -466,6 +466,42 @@ export default function FinancialsPage() {
             </div>
           )}
 
+          {(stats?.retainedAllocDetails?.length || 0) > 0 && (
+            <div>
+              <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-muted-foreground" />
+                Cancelled Show Allocations ({stats?.retainedAllocDetails?.length || 0})
+              </h2>
+              <div className="space-y-2">
+                {stats?.retainedAllocDetails?.map((detail) => {
+                  const cardContent = (
+                    <Card data-testid={`financial-cancelled-alloc-${detail.showId}`}>
+                      <CardContent className="pt-4 pb-4">
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium text-sm">{detail.showTitle}</p>
+                              <Badge variant="destructive" className="text-[10px]">Cancelled</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">Retained funds allocated to you</p>
+                          </div>
+                          <span className="text-sm font-bold" data-testid={`financial-cancelled-alloc-amount-${detail.showId}`}>
+                            Rs {detail.amount.toLocaleString()}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                  return isAdmin ? (
+                    <Link key={detail.showId} href={`/shows/${detail.showId}`}>{cardContent}</Link>
+                  ) : (
+                    <div key={detail.showId}>{cardContent}</div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div>
             <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
               <Music className="w-4 h-4 text-muted-foreground" />

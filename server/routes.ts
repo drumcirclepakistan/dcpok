@@ -503,6 +503,12 @@ export async function registerRoutes(
         return res.status(400).json({ message: `Total allocated (Rs ${totalAllocated}) exceeds retained amount (Rs ${retainedAmount})` });
       }
 
+      const previousAllocations = await storage.getRetainedFundAllocations(show.id);
+      const prevAllocMap: Record<string, number> = {};
+      for (const a of previousAllocations) {
+        prevAllocMap[a.bandMemberId] = a.amount;
+      }
+
       const parsed = allocations.map((a: any) => ({
         showId: show.id,
         bandMemberId: a.bandMemberId,
@@ -511,6 +517,37 @@ export async function registerRoutes(
       }));
 
       const created = await storage.replaceRetainedFundAllocations(show.id, parsed);
+
+      const allBandMembers = await storage.getBandMembers();
+      const bandMemberUserMap: Record<string, string> = {};
+      for (const bm of allBandMembers) {
+        if (bm.userId) bandMemberUserMap[bm.id] = bm.userId;
+      }
+
+      for (const alloc of parsed) {
+        const userId = bandMemberUserMap[alloc.bandMemberId];
+        if (!userId) continue;
+        const prevAmount = prevAllocMap[alloc.bandMemberId];
+        if (prevAmount === undefined) {
+          notifyUser(userId, "cancelled_allocation", `Rs ${alloc.amount.toLocaleString()} allocated to you from cancelled show "${show.title}"`, show.id, show.title);
+        } else if (prevAmount !== alloc.amount) {
+          notifyUser(userId, "cancelled_allocation_changed", `Cancelled show allocation from "${show.title}" changed from Rs ${prevAmount.toLocaleString()} to Rs ${alloc.amount.toLocaleString()}`, show.id, show.title);
+        }
+      }
+
+      const newAllocMap: Record<string, number> = {};
+      for (const a of parsed) {
+        newAllocMap[a.bandMemberId] = a.amount;
+      }
+      for (const prev of previousAllocations) {
+        if (!(prev.bandMemberId in newAllocMap)) {
+          const userId = bandMemberUserMap[prev.bandMemberId];
+          if (userId) {
+            notifyUser(userId, "cancelled_allocation_revoked", `Cancelled show allocation of Rs ${prev.amount.toLocaleString()} from "${show.title}" has been revoked`, show.id, show.title);
+          }
+        }
+      }
+
       res.json(created);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to save allocations" });
@@ -518,8 +555,30 @@ export async function registerRoutes(
   });
 
   app.delete("/api/shows/:id/retained-allocations", requireAdmin, async (req, res) => {
-    await storage.deleteRetainedFundAllocations(req.params.id as string);
-    res.json({ message: "Allocations cleared" });
+    try {
+      const show = await storage.getShow(req.params.id as string);
+      const previousAllocations = await storage.getRetainedFundAllocations(req.params.id as string);
+
+      if (previousAllocations.length > 0) {
+        const allBandMembers = await storage.getBandMembers();
+        const bandMemberUserMap: Record<string, string> = {};
+        for (const bm of allBandMembers) {
+          if (bm.userId) bandMemberUserMap[bm.id] = bm.userId;
+        }
+        const showTitle = show?.title || "Unknown Show";
+        for (const alloc of previousAllocations) {
+          const userId = bandMemberUserMap[alloc.bandMemberId];
+          if (userId) {
+            notifyUser(userId, "cancelled_allocation_revoked", `Cancelled show allocation of Rs ${alloc.amount.toLocaleString()} from "${showTitle}" has been revoked`, req.params.id as string, showTitle);
+          }
+        }
+      }
+
+      await storage.deleteRetainedFundAllocations(req.params.id as string);
+      res.json({ message: "Allocations cleared" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to clear allocations" });
+    }
   });
 
   app.put("/api/shows/:id/members", requireAdmin, async (req, res) => {
@@ -904,6 +963,7 @@ export async function registerRoutes(
       const memberShows = [];
 
       for (const show of allShows) {
+        if (show.status === "cancelled") continue;
         const members = await storage.getShowMembers(show.id);
         const found = members.find(m => m.name === member.name);
         if (found) {
@@ -926,6 +986,35 @@ export async function registerRoutes(
             numberOfDrums: show.numberOfDrums,
             location: show.location,
             isReferrer: found.isReferrer,
+          });
+        }
+      }
+
+      const cancelledShows = allShows.filter(s => s.status === "cancelled");
+      for (const show of cancelledShows) {
+        const members = await storage.getShowMembers(show.id);
+        const found = members.find(m => m.name === member.name);
+        if (found) {
+          const allocs = await storage.getRetainedFundAllocations(show.id);
+          const myAlloc = allocs.find(a => a.bandMemberId === member.id);
+          memberShows.push({
+            id: show.id,
+            title: show.title,
+            city: show.city,
+            showType: show.showType,
+            showDate: show.showDate.toISOString(),
+            totalAmount: member.canViewAmounts ? show.totalAmount : undefined,
+            myEarning: myAlloc ? myAlloc.amount : 0,
+            isPaid: false,
+            status: "cancelled",
+            isUpcoming: false,
+            organizationName: show.organizationName,
+            publicShowFor: show.publicShowFor,
+            numberOfDrums: show.numberOfDrums,
+            location: show.location,
+            isReferrer: found.isReferrer,
+            cancelledAllocation: myAlloc ? myAlloc.amount : 0,
+            cancellationReason: show.cancellationReason,
           });
         }
       }

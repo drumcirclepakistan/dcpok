@@ -28,6 +28,8 @@ interface MemberShow {
   numberOfDrums?: number | null;
   location?: string | null;
   isReferrer?: boolean;
+  cancelledAllocation?: number;
+  cancellationReason?: string | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -220,16 +222,31 @@ export default function ShowsPage() {
                 </Badge>
                 {isMember ? (
                   <>
-                    <span className="text-sm font-semibold" data-testid={`text-show-earning-${show.id}`}>
-                      Rs {show.myEarning?.toLocaleString() || "0"}
-                    </span>
-                    {show.isUpcoming && (
-                      <span className="text-[10px] text-muted-foreground italic">Estimated</span>
-                    )}
-                    {user?.canViewAmounts && show.totalAmount != null && (
-                      <span className="text-[10px] text-muted-foreground">
-                        Show total: Rs {show.totalAmount.toLocaleString()}
-                      </span>
+                    {isCancelled ? (
+                      show.cancelledAllocation > 0 ? (
+                        <>
+                          <span className="text-sm font-semibold" data-testid={`text-show-earning-${show.id}`}>
+                            Rs {show.cancelledAllocation.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">Allocated from cancelled</span>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground" data-testid={`text-show-earning-${show.id}`}>No allocation</span>
+                      )
+                    ) : (
+                      <>
+                        <span className="text-sm font-semibold" data-testid={`text-show-earning-${show.id}`}>
+                          Rs {show.myEarning?.toLocaleString() || "0"}
+                        </span>
+                        {show.isUpcoming && (
+                          <span className="text-[10px] text-muted-foreground italic">Estimated</span>
+                        )}
+                        {user?.canViewAmounts && show.totalAmount != null && (
+                          <span className="text-[10px] text-muted-foreground">
+                            Show total: Rs {show.totalAmount.toLocaleString()}
+                          </span>
+                        )}
+                      </>
                     )}
                   </>
                 ) : (
