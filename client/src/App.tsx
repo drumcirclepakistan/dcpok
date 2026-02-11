@@ -21,6 +21,7 @@ import FinancialsPage from "@/pages/financials";
 import DirectoryPage from "@/pages/directory";
 import PolicyPage from "@/pages/policy";
 import ActivityLogPage from "@/pages/activity-log";
+import MemberSettingsPage from "@/pages/member-settings";
 
 import { Redirect } from "wouter";
 
@@ -48,6 +49,7 @@ function Router() {
       <Route path="/financials" component={FinancialsPage} />
       <Route path="/policy">{() => <MemberOnly component={PolicyPage} />}</Route>
       <Route path="/settings">{() => <AdminOnly component={SettingsPage} />}</Route>
+      <Route path="/account" component={MemberSettingsPage} />
       <Route path="/activity-log">{() => <AdminOnly component={ActivityLogPage} />}</Route>
       <Route component={NotFound} />
     </Switch>
