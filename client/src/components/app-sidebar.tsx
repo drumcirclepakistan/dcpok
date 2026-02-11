@@ -34,7 +34,7 @@ export function AppSidebar() {
       }
       items.push({ title: "Financials", url: "/financials", icon: Wallet });
       items.push({ title: "Payout Policy", url: "/policy", icon: FileText });
-      items.push({ title: "Settings", url: "/account", icon: Settings });
+      items.push({ title: "Account", url: "/account", icon: UserCog });
       return items;
     }
     return [

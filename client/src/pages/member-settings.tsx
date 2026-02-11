@@ -146,6 +146,7 @@ export default function MemberSettingsPage() {
                     onClick={() => setShowCurrentPw(!showCurrentPw)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                     tabIndex={-1}
+                    data-testid="button-toggle-current-password"
                   >
                     {showCurrentPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
@@ -167,6 +168,7 @@ export default function MemberSettingsPage() {
                     onClick={() => setShowNewPw(!showNewPw)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                     tabIndex={-1}
+                    data-testid="button-toggle-new-password"
                   >
                     {showNewPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
@@ -188,6 +190,7 @@ export default function MemberSettingsPage() {
                     onClick={() => setShowConfirmPw(!showConfirmPw)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                     tabIndex={-1}
+                    data-testid="button-toggle-confirm-password"
                   >
                     {showConfirmPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>

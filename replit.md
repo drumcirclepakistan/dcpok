@@ -64,12 +64,13 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - **Member Financials**: Self-only view with paid/unpaid/pending breakdowns, no access to other members' data
 - **Permissions** (controlled by admin in Settings > Band Members):
   - `canAddShows`: Allows member to create new shows via the show form; member is auto-added to band section as referrer
-  - `canEditName`: Allows member to update their display name via pencil icon in sidebar (propagates to show_members records)
+  - `canEditName`: Allows member to update their display name via Account page (propagates to show_members records)
 - **Route Protection**: Backend uses `requireAdmin` middleware on admin routes; frontend uses `AdminOnly`/`MemberOnly` wrapper components in App.tsx to redirect unauthorized users to dashboard; members cannot access show details, settings, directory, expenses, or other admin-only pages
 - **Referred by you**: Shows tagged with "Referred by you" badge on shows page, dashboard upcoming/completed shows, and financials show lists
 - **Shows Referred stat**: Count of referred shows displayed on dashboard and financials (visible when > 0)
 - **Payout Policy page**: Member-only page showing payment structure (type, rates, referral rate, minimum logic) with descriptive explanations
-- **Sidebar**: Members see Dashboard, My Shows, Add Show (if permitted), Financials, Payout Policy (no Settings, no Show Detail links)
+- **Account page** (`/account`): Both admin and members can change their password (requires current password verification); members with `canEditName` can also update their display name
+- **Sidebar**: Members see Dashboard, My Shows, Add Show (if permitted), Financials, Payout Policy, Account (no Settings, no Show Detail links)
 
 ## Payment Rules (Dynamic Per-Member Configs)
 - Each band member has configurable payment settings stored in `band_members` table:
@@ -133,6 +134,8 @@ A modern, mobile-friendly band management web app for Drum Circle Pakistan. Admi
 - `GET /api/member/shows` - List member's assigned shows (member)
 - `GET /api/member/dashboard?from=&to=` - Member dashboard stats (member)
 - `GET /api/member/financials?from=&to=` - Member financial stats (member)
+- `PATCH /api/auth/change-password` - Change own password (authenticated, requires current password)
+- `POST /api/auth/emergency-reset` - Emergency admin password reset (public, requires ADMIN_RECOVERY_KEY)
 - `PATCH /api/member/name` - Update member's own name (member, requires canEditName)
 - `POST /api/member/shows` - Create show as member (member, requires canAddShows)
 - `GET /api/member/policy` - Get member's payout policy/payment config (member)
