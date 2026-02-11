@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  // This SSL setting is required for Render's managed PostgreSQL
+  // This section below is what fixes the crash on Render
   ssl: {
     rejectUnauthorized: false,
   },
