@@ -5,6 +5,7 @@ import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
 import { insertShowSchema, insertExpenseSchema, insertMemberSchema, defaultSettings } from "@shared/schema";
 import { seedDatabase } from "./seed";
+import { sendBulkShowAssignment, isEmailConfigured } from "./email";
 
 declare module "express-session" {
   interface SessionData {
@@ -399,13 +400,15 @@ export async function registerRoutes(
     res.json({ message: "Deleted" });
   });
 
-  // Save all members for a show at once (replaces existing)
   app.put("/api/shows/:id/members", requireAdmin, async (req, res) => {
     try {
       const show = await storage.getShow(req.params.id as string);
       if (!show || show.userId !== req.session.userId) {
         return res.status(404).json({ message: "Show not found" });
       }
+      const existingMembers = await storage.getShowMembers(req.params.id as string);
+      const existingNames = new Set(existingMembers.map(m => m.name));
+
       await storage.deleteShowMembers(req.params.id as string);
       const members = req.body.members || [];
       const created = [];
@@ -414,6 +417,30 @@ export async function registerRoutes(
         const member = await storage.createMember(parsed);
         created.push(member);
       }
+
+      if (isEmailConfigured()) {
+        const bandMembers = await storage.getBandMembers();
+        const bandEmailMap: Record<string, string> = {};
+        for (const bm of bandMembers) {
+          if (bm.email) bandEmailMap[bm.name] = bm.email;
+        }
+
+        const newMembers = created
+          .filter(m => !existingNames.has(m.name) && bandEmailMap[m.name])
+          .map(m => ({ email: bandEmailMap[m.name], name: m.name }));
+
+        if (newMembers.length > 0) {
+          sendBulkShowAssignment(newMembers, {
+            showTitle: show.title,
+            showDate: show.showDate.toISOString(),
+            city: show.city,
+            showType: show.showType,
+            location: show.location,
+            numberOfDrums: show.numberOfDrums,
+          }).catch(err => console.error("[Email] Bulk send error:", err));
+        }
+      }
+
       res.json(created);
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Invalid member data" });
@@ -944,6 +971,10 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(400).json({ message: err.message || "Failed to create show" });
     }
+  });
+
+  app.get("/api/email-status", requireAdmin, async (_req, res) => {
+    res.json({ configured: isEmailConfigured() });
   });
 
   // Settings (admin only)

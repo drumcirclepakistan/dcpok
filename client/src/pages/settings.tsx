@@ -43,6 +43,7 @@ import {
   Settings as SettingsIcon, Save, Loader2, Percent, DollarSign,
   Users, UserPlus, Shield, KeyRound, Trash2, UserCheck, UserX,
   ChevronDown, ChevronRight, Tag, Plus, Pencil, X, Calendar, MapPin,
+  Mail,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
@@ -73,6 +74,7 @@ interface BandMember {
   canAddShows: boolean;
   canEditName: boolean;
   canViewAmounts: boolean;
+  email: string | null;
 }
 
 interface ShowType {
@@ -277,7 +279,7 @@ export default function SettingsPage() {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string; role?: string; customRole?: string | null; canAddShows?: boolean; canEditName?: boolean; canViewAmounts?: boolean }) =>
+    mutationFn: ({ id, ...data }: { id: string; role?: string; customRole?: string | null; canAddShows?: boolean; canEditName?: boolean; canViewAmounts?: boolean; email?: string | null }) =>
       apiRequest("PATCH", `/api/band-members/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/band-members"] });
@@ -765,6 +767,29 @@ export default function SettingsPage() {
                   </div>
                 </>
               )}
+
+              <Separator />
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Mail className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                <Input
+                  type="email"
+                  placeholder="member@email.com"
+                  defaultValue={member.email || ""}
+                  className="flex-1 min-w-[180px] max-w-[280px]"
+                  data-testid={`input-email-${member.id}`}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (val !== (member.email || "")) {
+                      updateRoleMutation.mutate({
+                        id: member.id,
+                        email: val || null,
+                      });
+                    }
+                  }}
+                />
+                <span className="text-[10px] text-muted-foreground">For show notifications</span>
+              </div>
 
               <Separator />
 

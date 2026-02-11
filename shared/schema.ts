@@ -141,6 +141,7 @@ export const bandMembers = pgTable("band_members", {
   canAddShows: boolean("can_add_shows").notNull().default(false),
   canEditName: boolean("can_edit_name").notNull().default(false),
   canViewAmounts: boolean("can_view_amounts").notNull().default(false),
+  email: text("email"),
 });
 
 export const insertBandMemberSchema = createInsertSchema(bandMembers).omit({
@@ -159,6 +160,7 @@ export const insertBandMemberSchema = createInsertSchema(bandMembers).omit({
   canAddShows: z.boolean().optional(),
   canEditName: z.boolean().optional(),
   canViewAmounts: z.boolean().optional(),
+  email: z.string().email().optional().nullable(),
 });
 
 export type InsertBandMember = z.infer<typeof insertBandMemberSchema>;
